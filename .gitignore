@@ -1,0 +1,15 @@
+# Vivado generated files
+**/.Xil/
+*.jou
+*.log
+*.rtd
+*.wdb
+*.str
+*.pb
+
+# Vivado generated directories
+*.cache/
+*.hw/
+*.ip_user_files/
+*.runs/
+*.sim/
