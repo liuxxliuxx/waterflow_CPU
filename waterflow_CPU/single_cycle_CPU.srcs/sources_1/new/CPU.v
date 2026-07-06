@@ -72,6 +72,10 @@ module Control_Unit(
     wire sra_w  = (inst[31:15] == 17'h00030);
     wire mul_w  = (inst[31:15] == 17'h00038);
     
+    wire slli_w = (inst[31:15] == 17'h00081);
+    wire srli_w = (inst[31:15] == 17'h00089);
+    wire srai_w = (inst[31:15] == 17'h00091);
+    
     
     wire fadd_s = (inst[31:15] == 17'h00201);
     wire fsub_s = (inst[31:15] == 17'h00205);
@@ -90,6 +94,8 @@ module Control_Unit(
     wire ld_w   = (inst[31:22] == 10'h0a2);
     wire st_w   = (inst[31:22] == 10'h0a6);
     
+    
+    
     wire lu12i_w= (inst[31:25] == 7'h0a);
     
     wire beqz   = (inst[31:26] == 6'h10);
@@ -101,16 +107,16 @@ module Control_Unit(
     wire blt    = (inst[31:26] == 6'h18);
     wire bgeu   = (inst[31:26] == 6'h1b);
     
-    wire r_type = add_w | sub_w | mul_w | and_ | nor_ | xor_ | slt | sltu | sll_w | srl_w | sra_w;
+    wire r_type = add_w | sub_w | mul_w | and_ | nor_ | xor_ | or_ | slt | sltu | sll_w | srl_w | sra_w;
     
-    assign regWr    = add_w|sub_w|mul_w|addi_w|ld_w|and_|nor_|or_|xor_|slt|sltu|sll_w|srl_w|sra_w|lu12i_w|bl|jirl|ori;
+    assign regWr    = add_w|sub_w|mul_w|addi_w|ld_w|and_|nor_|or_|xor_|slt|sltu|sll_w|srl_w|sra_w|lu12i_w|bl|jirl|ori|slli_w|srli_w|srai_w;
     assign RegDst   = st_w|bne|blt|bgeu|beq;
     assign RegDst1  = bl;
-    assign ALUSrc   = addi_w|ld_w|st_w|lu12i_w|ori;
+    assign ALUSrc   = addi_w|ld_w|st_w|lu12i_w|ori|slli_w|srli_w|srai_w;
     assign MemWr    = st_w;
     assign MemtoReg = ld_w;
-    assign PCtoReg  = bl|jirl;
-    assign Src1Used = r_type | addi_w | ori | ld_w | st_w | beqz | jirl | bne | beq | blt | bgeu ;
+    assign PCtoReg  = bl | jirl;
+    assign Src1Used = r_type | addi_w | ori | ld_w | st_w | beqz | jirl | bne | beq | blt | bgeu | slli_w | srli_w | srai_w;
     assign Src2Used = r_type | st_w   | bne | beq  | blt  | bgeu ;
     
     assign FpRegWr    = fadd_s | fsub_s | fmul_s | fmov_s | movgr2fr_w | fld_s ;
@@ -138,8 +144,11 @@ module Control_Unit(
             slt  :   ALUctr = 4'b0110;
             sltu :   ALUctr = 4'b0111;
             sll_w:   ALUctr = 4'b1000;
+            slli_w:  ALUctr = 4'b1000;
             srl_w:   ALUctr = 4'b1001;
+            srli_w:  ALUctr = 4'b1001;
             sra_w:   ALUctr = 4'b1011;
+            srai_w:  ALUctr = 4'b1011;
             nor_ :   ALUctr = 4'b1100;
             lu12i_w: ALUctr = 4'b1101;
             default: ALUctr = 4'b0000;
@@ -187,6 +196,10 @@ module ImmGen(
     wire sra_w  = (inst[31:15] == 17'h00030);
     wire mul_w  = (inst[31:15] == 17'h00038);
     
+    wire slli_w = (inst[31:15] == 17'h00081);
+    wire srli_w = (inst[31:15] == 17'h00089);
+    wire srai_w = (inst[31:15] == 17'h00091);
+    
     wire addi_w = (inst[31:22] == 10'h00a);
     wire ori    = (inst[31:22] == 10'h00e);
     wire ld_w   = (inst[31:22] == 10'h0a2);
@@ -203,6 +216,7 @@ module ImmGen(
     wire blt    = (inst[31:26] == 6'h18);
     wire bgeu   = (inst[31:26] == 6'h1b);
     
+    wire[4:0]  imm5   = inst[14:10];
     wire[11:0] imm12  = inst[21:10];
     wire[15:0] imm16  = inst[25:10];
     wire[19:0] imm20  = inst[24:5];
@@ -213,6 +227,9 @@ module ImmGen(
         case(1'b1)
             addi_w: imm32 = {{20{imm12[11]}},imm12};
             ori:    imm32 = {20'd0,imm12};
+            slli_w: imm32 = {27'd0,imm5};
+            srli_w: imm32 = {27'd0,imm5};
+            srai_w: imm32 = {27'd0,imm5};
             ld_w:   imm32 = {{20{imm12[11]}},imm12};
             st_w:   imm32 = {{20{imm12[11]}},imm12};
             beqz:   imm32 = {{9{offs21[20]}},offs21,2'b00};
@@ -224,6 +241,7 @@ module ImmGen(
             blt:    imm32 = {{14{imm16[15]}},imm16,2'b00};
             bgeu:   imm32 = {{14{imm16[15]}},imm16,2'b00};
             lu12i_w:imm32 = {imm20,12'b0};
+            
             default:imm32 = 32'd0;
         endcase
     end 
