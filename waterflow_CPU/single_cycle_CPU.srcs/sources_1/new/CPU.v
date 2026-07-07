@@ -67,6 +67,8 @@ module Control_Unit(
     wire xor_   = (inst[31:15] == 17'h0002B);
     wire slt    = (inst[31:15] == 17'h00024);
     wire sltu   = (inst[31:15] == 17'h00025);
+    wire andn   = (inst[31:15] == 17'h0002C);//rk与rj的按位与取反
+    wire orn    = (inst[31:15] == 17'h0002D);//rk与rj的按位或取反
     wire sll_w  = (inst[31:15] == 17'h0002E);
     wire srl_w  = (inst[31:15] == 17'h0002F);
     wire sra_w  = (inst[31:15] == 17'h00030);
@@ -82,6 +84,43 @@ module Control_Unit(
     wire srli_w = (inst[31:15] == 17'h00089);
     wire srai_w = (inst[31:15] == 17'h00091);
     
+    wire ext_w_h= (inst[31:15] == 17'h00002);//rj[7:0]符号扩展成32位
+    wire ext_w_b= (inst[31:15] == 17'h00003);//rj[15:0]符号扩展成32位
+    wire clz_w  = (inst[31:15] == 17'h00004);//rj从高位开始连续0的个数
+    wire ctz_w  = (inst[31:15] == 17'h00005);//rj从低位开始连续0的个数
+    wire clo_w  = (inst[31:15] == 17'h00006);//rj从高位开始连续1的个数
+    wire cto_w  = (inst[31:15] == 17'h00007);//rj从低位开始连续1的个数
+
+    wire cpucfg = (inst[31:15] == 17'h0000b);//读CPU配置寄存器
+
+    wire maskeqz= (inst[31:15] == 17'h00070);//如果rk==0写rj，否则写0
+    wire masknez= (inst[31:15] == 17'h00071);//如果rk!=0写rj，否则写0
+
+    wire break_ = (inst[31:15] == 17'h00054);//断点异常
+    wire syscall= (inst[31:15] == 17'h00056);//系统调用，触发系统异常
+
+    wire ertn   = (inst        == 32'h0648_3800);//返回异常处理程序
+
+    wire dbar   = (inst[31:15] == 17'h070e4);//数据访问屏障
+    wire ibar   = (inst[31:15] == 17'h070e5);//指令访问屏障
+    wire idle   = (inst[31:15] == 17'h00c91);//等待中断
+    wire cacop  = (inst[31:22] == 10'h018);//cache操作指令
+
+    wire ll_w   = (inst[31:24] == 8'h20);//读内存+记录地址+设置llbit
+    wire sc_w   = (inst[31:24] == 8'h21);//判断llbit，如果是1就写内存并且rd置1，否则rd置0不写内存
+
+    wire csrrd  = (inst[31:24] == 8'h04) && (inst[9:5] == 5'h0);//从CSR寄存器中读数据到通用寄存器
+    wire csrwr  = (inst[31:24] == 8'h04) && (inst[9:5] == 5'h1);//将rd数据写入CSR寄存器
+
+    wire csrxchg= (inst[31:24] == 8'h04) && (inst[9:5] == 5'h2);//按rj掩码把rd数据写入CSR寄存器，并将CSR寄存器原来的值写入rd
+    
+    wire rdtimel_w=(inst[31:15]==17'h00000)&&(inst[14:10]==5'h18);//读64位计时器低32位
+    wire rdtimeh_w=(inst[31:15]==17'h00000)&&(inst[14:10]==5'h19);//读64位计时器高32位
+    
+    
+
+    wire alsl_w = (inst[31:17] == 15'h0002);//把rj左移sa2位后加rk
+    
     
     wire fadd_s = (inst[31:15] == 17'h00201);
     wire fsub_s = (inst[31:15] == 17'h00205);
@@ -94,15 +133,29 @@ module Control_Unit(
     wire fld_s  = (inst[31:22] == 10'h0ac);
     wire fst_s  = (inst[31:22] == 10'h0ad);
     
-    
+    wire bstrins_w = (inst[31:22] == 10'h006); //未实现
+    wire bstrpick_w= (inst[31:22] == 10'h007); //未实现
+    wire slti   = (inst[31:22] == 10'h008);//
+    wire sltui  = (inst[31:22] == 10'h009);//
+    wire
     wire addi_w = (inst[31:22] == 10'h00a);
-    wire ori    = (inst[31:22] == 10'h00e);
+    wire andi   = (inst[31:22] == 10'h00d);//
+    wire ori    = (inst[31:22] == 10'h00e);//
+    wire xori   = (inst[31:22] == 10'h00f);//
+    wire ld_b   = (inst[31:22] == 10'h0a0);//
+    wire ld_h   = (inst[31:22] == 10'h0a1);//
     wire ld_w   = (inst[31:22] == 10'h0a2);
+    wire st_b   = (inst[31:22] == 10'h0a4);//
+    wire st_h   = (inst[31:22] == 10'h0a5);//
     wire st_w   = (inst[31:22] == 10'h0a6);
-    
+    wire ld_bu  = (inst[31:22] == 10'h0a8);//
+    wire ld_hu  = (inst[31:22] == 10'h0a9);//
     
     
     wire lu12i_w= (inst[31:25] == 7'h0a);
+    wire pcaddi = (inst[31:25] == 7'h0c);//计算PC值加上（20位立即数左移2位）
+    wire pcalau12i=(inst[31:25] == 7'h0d);//计算PC值加上20位立即数，取高4位
+    wire pcaddu12i=(inst[31:25] == 7'h0e);//计算PC值加上（20位立即数左移12位）
     
     wire beqz   = (inst[31:26] == 6'h10);
     wire jirl   = (inst[31:26] == 6'h13);
@@ -111,7 +164,11 @@ module Control_Unit(
     wire beq    = (inst[31:26] == 6'h16);
     wire bne    = (inst[31:26] == 6'h17);
     wire blt    = (inst[31:26] == 6'h18);
+    wire bge    = (inst[31:26] == 6'h19);//有符号大于等于跳转
+    wire bltu   = (inst[31:26] == 6'h1a);//无符号小于跳转
     wire bgeu   = (inst[31:26] == 6'h1b);
+
+    
     
     wire r_type = add_w | sub_w | mul_w | and_ | nor_ | xor_ | or_ | slt | sltu | sll_w | srl_w | sra_w;
     
@@ -136,29 +193,34 @@ module Control_Unit(
     
     always @(*) begin
         case(1'b1)
-            nop  :   ALUctr = 4'b00000;
-            add_w:   ALUctr = 4'b00001;
-            sub_w:   ALUctr = 4'b00010;
-            mul_w:   ALUctr = 4'b00011;
-            bne  :   ALUctr = 4'b00010;
-            beq  :   ALUctr = 4'b00010;
-            blt  :   ALUctr = 4'b00010;
-            bgeu :   ALUctr = 4'b00010;
-            and_ :   ALUctr = 4'b00100;
-            or_  :   ALUctr = 4'b00101;
-            ori  :   ALUctr = 4'b00101;
-            xor_ :   ALUctr = 4'b00110;
-            slt  :   ALUctr = 4'b00111;
-            sltu :   ALUctr = 4'b01000;
-            sll_w:   ALUctr = 4'b01001;
-            slli_w:  ALUctr = 4'b01001;
-            srl_w:   ALUctr = 4'b01010;
-            srli_w:  ALUctr = 4'b01010;
-            sra_w:   ALUctr = 4'b01100;
-            srai_w:  ALUctr = 4'b01100;
-            nor_ :   ALUctr = 4'b01101;
-            lu12i_w: ALUctr = 4'b01110;
-            default: ALUctr = 4'b00000;
+            nop  :   ALUctr = 5'b00000;
+            add_w:   ALUctr = 5'b00001;
+            sub_w:   ALUctr = 5'b00010;
+            bne  :   ALUctr = 5'b00010;
+            beq  :   ALUctr = 5'b00010;
+            blt  :   ALUctr = 5'b00010;
+            bgeu :   ALUctr = 5'b00010;
+            and_ :   ALUctr = 5'b00011;
+            or_  :   ALUctr = 5'b00100;
+            ori  :   ALUctr = 5'b00100;
+            xor_ :   ALUctr = 5'b00101;
+            slt  :   ALUctr = 5'b00110;
+            sltu :   ALUctr = 5'b00111;
+            sll_w:   ALUctr = 5'b01000;
+            slli_w:  ALUctr = 5'b01000;
+            srl_w:   ALUctr = 5'b01001;
+            srli_w:  ALUctr = 5'b01001;
+            sra_w:   ALUctr = 5'b01011;
+            srai_w:  ALUctr = 5'b01011;
+            nor_ :   ALUctr = 5'b01100;
+            lu12i_w: ALUctr = 5'b01101;
+            ext_w_h: ALUctr = 5'b01110;
+            ext_w_b: ALUctr = 5'b01111;
+            clz_w:   ALUctr = 5'b10000;
+            ctz_w:   ALUctr = 5'b10001;
+            clo_w:   ALUctr = 5'b10010;
+            cto_w:   ALUctr = 5'b10011;
+            default: ALUctr = 5'b00000;
         endcase
     end
     

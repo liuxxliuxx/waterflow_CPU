@@ -17,7 +17,6 @@ module ALU(
     wire[31:0] xor_res;
     wire[31:0] bsh_res;
     wire[31:0] nor_res;
-    wire[63:0] mux_res;
     assign is_sub = (alu_op == 4'b0001 || alu_op == 4'b0110 || alu_op == 4'b0111);
     assign op_B = is_sub ? (~B) : B;
     
@@ -26,8 +25,6 @@ module ALU(
     assign OF = (A[31] == op_B[31])&&(add_res[31] != A[31]);
     
     adder u_adder(.A(A),.B(op_B),.cin(is_sub),.Sum(add_res),.cout(cout));
-    
-    booth_wallace u_muxer(.A(A),.B(B),.Product(mux_res));
     
     ander u_and(.A(A),.B(B),.res(and_res));
     
@@ -48,20 +45,20 @@ module ALU(
     
     always @(*) begin
         case(alu_op)
-            4'b00001: alu_res = add_res;
-            4'b00010: alu_res = add_res;
-            4'b00011: alu_res = mux_res[31:0];
-            4'b00100: alu_res = and_res;
-            4'b00101: alu_res = or_res;
-            4'b00110: alu_res = xor_res;
-            4'b00111: alu_res = slt_res;
-            4'b01000: alu_res = sltu_res;
-            4'b01001: alu_res = bsh_res;
-            4'b01010: alu_res = bsh_res;
-            4'b01011: alu_res = bsh_res;
-            4'b01100: alu_res = bsh_res;
-            4'b01101: alu_res = nor_res;
-            4'b01110: alu_res = B;
+            5'b00001: alu_res = add_res;
+            5'b00010: alu_res = add_res;
+            5'b00011: alu_res = and_res;
+            5'b00100: alu_res = or_res;
+            5'b00101: alu_res = xor_res;
+            5'b00110: alu_res = slt_res;
+            5'b00111: alu_res = sltu_res;
+            5'b01000: alu_res = bsh_res;
+            5'b01001: alu_res = bsh_res;
+            5'b01010: alu_res = bsh_res;
+            5'b01011: alu_res = bsh_res;
+            5'b01100: alu_res = nor_res;
+            5'b01101: alu_res = B;
+            5'b01110: alu_res = ;
             default: alu_res = 32'd0;
         endcase
     end
