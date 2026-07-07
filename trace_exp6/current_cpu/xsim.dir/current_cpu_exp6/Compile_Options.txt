@@ -1,0 +1,1 @@
+"tb_top" -snapshot "current_cpu_exp6" -timescale "1ns/1ps" 

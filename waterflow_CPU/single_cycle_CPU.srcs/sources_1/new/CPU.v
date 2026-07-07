@@ -71,6 +71,12 @@ module Control_Unit(
     wire srl_w  = (inst[31:15] == 17'h0002F);
     wire sra_w  = (inst[31:15] == 17'h00030);
     wire mul_w  = (inst[31:15] == 17'h00038);
+    wire mulh_w = (inst[31:15] == 17'h00039);
+    wire mulh_wu= (inst[31:15] == 17'h0003A);
+    wire div_w  = (inst[31:15] == 17'h00040);
+    wire mod_w  = (inst[31:15] == 17'h00041);
+    wire div_wu = (inst[31:15] == 17'h00042);
+    wire mod_wu = (inst[31:15] == 17'h00043);
     
     wire slli_w = (inst[31:15] == 17'h00081);
     wire srli_w = (inst[31:15] == 17'h00089);
@@ -130,28 +136,29 @@ module Control_Unit(
     
     always @(*) begin
         case(1'b1)
-            add_w:   ALUctr = 4'b0000;
-            sub_w:   ALUctr = 4'b0001;
-            mul_w:   ALUctr = 4'b0010;
-            bne  :   ALUctr = 4'b0001;
-            beq  :   ALUctr = 4'b0001;
-            blt  :   ALUctr = 4'b0001;
-            bgeu :   ALUctr = 4'b0001;
-            and_ :   ALUctr = 4'b0011;
-            or_  :   ALUctr = 4'b0100;
-            ori  :   ALUctr = 4'b0100;
-            xor_ :   ALUctr = 4'b0101;
-            slt  :   ALUctr = 4'b0110;
-            sltu :   ALUctr = 4'b0111;
-            sll_w:   ALUctr = 4'b1000;
-            slli_w:  ALUctr = 4'b1000;
-            srl_w:   ALUctr = 4'b1001;
-            srli_w:  ALUctr = 4'b1001;
-            sra_w:   ALUctr = 4'b1011;
-            srai_w:  ALUctr = 4'b1011;
-            nor_ :   ALUctr = 4'b1100;
-            lu12i_w: ALUctr = 4'b1101;
-            default: ALUctr = 4'b0000;
+            nop  :   ALUctr = 4'b00000;
+            add_w:   ALUctr = 4'b00001;
+            sub_w:   ALUctr = 4'b00010;
+            mul_w:   ALUctr = 4'b00011;
+            bne  :   ALUctr = 4'b00010;
+            beq  :   ALUctr = 4'b00010;
+            blt  :   ALUctr = 4'b00010;
+            bgeu :   ALUctr = 4'b00010;
+            and_ :   ALUctr = 4'b00100;
+            or_  :   ALUctr = 4'b00101;
+            ori  :   ALUctr = 4'b00101;
+            xor_ :   ALUctr = 4'b00110;
+            slt  :   ALUctr = 4'b00111;
+            sltu :   ALUctr = 4'b01000;
+            sll_w:   ALUctr = 4'b01001;
+            slli_w:  ALUctr = 4'b01001;
+            srl_w:   ALUctr = 4'b01010;
+            srli_w:  ALUctr = 4'b01010;
+            sra_w:   ALUctr = 4'b01100;
+            srai_w:  ALUctr = 4'b01100;
+            nor_ :   ALUctr = 4'b01101;
+            lu12i_w: ALUctr = 4'b01110;
+            default: ALUctr = 4'b00000;
         endcase
     end
     
