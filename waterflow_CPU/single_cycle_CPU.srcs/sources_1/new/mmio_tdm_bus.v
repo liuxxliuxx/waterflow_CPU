@@ -1,6 +1,6 @@
 `timescale 1ns / 1ps
 
-module mmio_tdm_bus_lite(
+module mmio_tdm_bus(
     input wire clk,
     input wire rst,
     input wire req_valid,
@@ -13,30 +13,26 @@ module mmio_tdm_bus_lite(
     input wire resp_ready,
     output reg [31:0] resp_rdata,
     output reg resp_err,
-    input wire ps2_empty,
-    input wire ps2_full,
-    input wire ps2_overflow,
-    input wire ps2_shift,
-    input wire ps2_caps_lock,
-    input wire [7:0] ps2_rdata,
-    output reg ps2_rd,
-    output reg vga_we,
-    output reg [11:0] vga_addr,
-    output reg [7:0] vga_wdata,
-    input wire [7:0] vga_rdata,
-    input wire vga_busy,
+    input wire ps2_clk,
+    input wire ps2_dat,
+    input wire vga_clk,
+    output wire [3:0] vga_r,
+    output wire [3:0] vga_g,
+    output wire [3:0] vga_b,
+    output wire vga_hsync,
+    output wire vga_vsync,
+    output wire uart_tx,
+    input wire uart_rx,
+    output wire [7:0] irq,
     input wire [31:0] timer_value,
-    output reg uart_send,
-    output reg [7:0] uart_data,
-    input wire uart_busy,
-    output reg nand_req_valid,
-    input wire nand_req_ready,
-    output reg nand_req_we,
-    output reg [7:0] nand_req_addr,
-    output reg [3:0] nand_req_wstrb,
-    output reg [31:0] nand_req_wdata,
-    input wire nand_resp_valid,
-    input wire [31:0] nand_resp_rdata,
+    inout wire [7:0] nand_d,
+    output wire nand_cle,
+    output wire nand_ale,
+    output wire nand_ce_n,
+    output wire nand_re_n,
+    output wire nand_we_n,
+    output wire nand_wp_n,
+    input wire nand_rdy,
     output reg [7:0] led_value,
     output reg [31:0] diag_value
 );
@@ -48,6 +44,29 @@ module mmio_tdm_bus_lite(
     reg [1:0] state;
     reg [2:0] slot;
     reg vga_wait_req;
+
+    wire [7:0] ps2_rdata;
+    wire ps2_empty, ps2_full, ps2_overflow, ps2_frame_error, ps2_shift, ps2_caps;
+    reg ps2_rd;
+
+    reg vga_we;
+    wire vga_busy;
+    reg [11:0] vga_addr;
+    reg [7:0] vga_wdata;
+    wire [7:0] vga_rdata;
+
+    reg uart_send;
+    wire uart_busy;
+    reg [7:0] uart_data;
+
+    reg nand_req_valid;
+    wire nand_req_ready;
+    reg nand_req_we;
+    reg [7:0] nand_req_addr;
+    reg [3:0] nand_req_wstrb;
+    reg [31:0] nand_req_wdata;
+    wire nand_resp_valid;
+    wire [31:0] nand_resp_rdata;
 
     wire dev_ps2   = (req_addr[31:16] == 16'h1fe0);
     wire dev_vga   = (req_addr[31:16] == 16'h1fe1);
@@ -67,6 +86,70 @@ module mmio_tdm_bus_lite(
     assign req_ready = (state == S_IDLE) && (!resp_valid || resp_ready) &&
                        slot_match && (!dev_vga || !vga_busy) &&
                        (!dev_nand || nand_req_ready);
+
+    assign irq = {5'b0, !ps2_empty, timer_value[20], 1'b0};
+
+    ps2_keyboard u_ps2(
+        .clk(clk),
+        .rst(rst),
+        .ps2_clk(ps2_clk),
+        .ps2_dat(ps2_dat),
+        .rd_en(ps2_rd),
+        .rd_data(ps2_rdata),
+        .empty(ps2_empty),
+        .full(ps2_full),
+        .overflow(ps2_overflow),
+        .frame_error(ps2_frame_error),
+        .shift_down(ps2_shift),
+        .caps_lock(ps2_caps)
+    );
+
+    vga_text u_vga(
+        .cpu_clk(clk),
+        .pix_clk(vga_clk),
+        .rst(rst),
+        .cpu_we(vga_we),
+        .cpu_addr(vga_addr),
+        .cpu_wdata(vga_wdata),
+        .cpu_rdata(vga_rdata),
+        .cpu_busy(vga_busy),
+        .vga_r(vga_r),
+        .vga_g(vga_g),
+        .vga_b(vga_b),
+        .hsync(vga_hsync),
+        .vsync(vga_vsync)
+    );
+
+    uart_tx_simple u_uart(
+        .clk(clk),
+        .rst(rst),
+        .send(uart_send),
+        .data(uart_data),
+        .tx(uart_tx),
+        .busy(uart_busy)
+    );
+
+    nand_ctrl_readonly u_nand(
+        .clk(clk),
+        .rst(rst),
+        .mmio_req_ready(nand_req_ready),
+        .mmio_req_valid(nand_req_valid),
+        .mmio_req_we(nand_req_we),
+        .mmio_req_addr(nand_req_addr),
+        .mmio_req_wstrb(nand_req_wstrb),
+        .mmio_req_wdata(nand_req_wdata),
+        .mmio_resp_valid(nand_resp_valid),
+        .mmio_resp_ready(1'b1),
+        .mmio_resp_rdata(nand_resp_rdata),
+        .nand_d(nand_d),
+        .nand_cle(nand_cle),
+        .nand_ale(nand_ale),
+        .nand_ce_n(nand_ce_n),
+        .nand_re_n(nand_re_n),
+        .nand_we_n(nand_we_n),
+        .nand_wp_n(nand_wp_n),
+        .nand_rdy(nand_rdy)
+    );
 
     always @(posedge clk) begin
         if (rst) begin

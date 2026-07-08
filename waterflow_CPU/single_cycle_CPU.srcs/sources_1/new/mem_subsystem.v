@@ -66,8 +66,10 @@ module mem_subsystem(
     output wire [0:0] ddr3_odt
 );
     reg [31:0] timer;
-    reg ddr_resp_is_d;
-    reg [31:0] ddr_resp_badv;
+    reg [31:0] i_cache_resp_badv;
+    reg [31:0] d_cache_resp_badv;
+    reg bridge_resp_is_i;
+    reg bridge_resp_is_write;
 
     wire rst_hi = !rst;
 
@@ -82,81 +84,58 @@ module mem_subsystem(
     wire i_resp_room = !i_resp_valid || i_resp_ready;
     wire d_resp_room = !d_resp_valid || d_resp_ready;
 
-    wire d_ddr_sel = d_req_valid && !d_is_mmio && d_resp_room;
-    wire i_ddr_sel = i_req_valid && i_resp_room && !d_ddr_sel;
-    wire ddr_req_valid = d_ddr_sel || i_ddr_sel;
-    wire ddr_req_ready;
-    wire ddr_req_fire = ddr_req_valid && ddr_req_ready;
-    wire ddr_req_we = d_ddr_sel && d_req_we;
-    wire [3:0] ddr_req_wstrb = d_ddr_sel ? d_req_wstrb : 4'b0000;
-    wire [31:0] ddr_req_addr = d_ddr_sel ? d_req_vaddr : i_req_vaddr;
-    wire [31:0] ddr_req_wdata = d_req_wdata;
-    wire ddr_resp_valid;
-    wire ddr_resp_ready = ddr_resp_is_d ? d_resp_room : i_resp_room;
-    wire [31:0] ddr_resp_rdata;
+    wire i_cache_req_valid = i_req_valid && i_resp_room;
+    wire i_cache_req_ready;
+    wire i_cache_req_fire = i_cache_req_valid && i_cache_req_ready;
+    wire i_cache_resp_valid;
+    wire i_cache_resp_ready = i_resp_room;
+    wire [31:0] i_cache_resp_inst;
+    wire i_cache_mem_req_valid;
+    wire i_cache_mem_req_ready;
+    wire [31:0] i_cache_mem_req_addr;
+    wire i_cache_mem_resp_valid;
+    wire [31:0] i_cache_mem_resp_rdata;
 
-    wire [7:0] ps2_rdata;
-    wire ps2_empty, ps2_full, ps2_overflow, ps2_frame_error, ps2_shift, ps2_caps;
-    wire ps2_rd;
+    wire d_cache_req_valid = d_req_valid && !d_is_mmio && d_resp_room;
+    wire d_cache_req_ready;
+    wire d_cache_req_fire = d_cache_req_valid && d_cache_req_ready;
+    wire d_cache_resp_valid;
+    wire d_cache_resp_ready = d_resp_room;
+    wire [31:0] d_cache_resp_rdata;
+    wire d_cache_mem_req_valid;
+    wire d_cache_mem_req_ready;
+    wire d_cache_mem_req_we;
+    wire [3:0] d_cache_mem_req_wstrb;
+    wire [31:0] d_cache_mem_req_addr;
+    wire [31:0] d_cache_mem_req_wdata;
+    wire d_cache_mem_resp_valid;
+    wire [31:0] d_cache_mem_resp_rdata;
 
-    ps2_keyboard u_ps2(
-        .clk(clk),
-        .rst(rst_hi),
-        .ps2_clk(ps2_clk),
-        .ps2_dat(ps2_dat),
-        .rd_en(ps2_rd),
-        .rd_data(ps2_rdata),
-        .empty(ps2_empty),
-        .full(ps2_full),
-        .overflow(ps2_overflow),
-        .frame_error(ps2_frame_error),
-        .shift_down(ps2_shift),
-        .caps_lock(ps2_caps)
-    );
+    wire d_cache_mem_sel = d_cache_mem_req_valid;
+    wire i_cache_mem_sel = i_cache_mem_req_valid && !d_cache_mem_sel;
+    wire bridge_req_valid = d_cache_mem_sel || i_cache_mem_sel;
+    wire bridge_req_ready;
+    wire bridge_req_fire = bridge_req_valid && bridge_req_ready;
+    wire bridge_req_we = d_cache_mem_sel ? d_cache_mem_req_we : 1'b0;
+    wire [3:0] bridge_req_wstrb = d_cache_mem_sel ? d_cache_mem_req_wstrb : 4'b0000;
+    wire [31:0] bridge_req_addr = d_cache_mem_sel ? d_cache_mem_req_addr : i_cache_mem_req_addr;
+    wire [31:0] bridge_req_wdata = d_cache_mem_sel ? d_cache_mem_req_wdata : 32'h0;
+    wire bridge_resp_valid;
+    wire [31:0] bridge_resp_rdata;
 
-    wire vga_we, vga_busy;
-    wire [11:0] vga_addr;
-    wire [7:0] vga_wdata, vga_rdata;
-
-    vga_text u_vga(
-        .cpu_clk(clk),
-        .pix_clk(vga_clk),
-        .rst(rst_hi),
-        .cpu_we(vga_we),
-        .cpu_addr(vga_addr),
-        .cpu_wdata(vga_wdata),
-        .cpu_rdata(vga_rdata),
-        .cpu_busy(vga_busy),
-        .vga_r(vga_r),
-        .vga_g(vga_g),
-        .vga_b(vga_b),
-        .hsync(vga_hsync),
-        .vsync(vga_vsync)
-    );
-
-    wire uart_send, uart_busy;
-    wire [7:0] uart_data;
-
-    uart_tx_simple u_uart(
-        .clk(clk),
-        .rst(rst_hi),
-        .send(uart_send),
-        .data(uart_data),
-        .tx(uart_tx),
-        .busy(uart_busy)
-    );
-
-    assign irq = {5'b0, !ps2_empty, timer[20], 1'b0};
+    assign d_cache_mem_req_ready = d_cache_mem_sel && bridge_req_ready;
+    assign i_cache_mem_req_ready = i_cache_mem_sel && bridge_req_ready;
+    assign d_cache_mem_resp_valid = bridge_resp_valid && !bridge_resp_is_i && !bridge_resp_is_write;
+    assign i_cache_mem_resp_valid = bridge_resp_valid && bridge_resp_is_i && !bridge_resp_is_write;
+    assign d_cache_mem_resp_rdata = bridge_resp_rdata;
+    assign i_cache_mem_resp_rdata = bridge_resp_rdata;
 
     wire mmio_req_valid = d_req_valid && d_is_mmio && d_req_ready;
     wire mmio_req_ready, mmio_resp_valid, mmio_resp_err;
+    wire mmio_resp_ready = d_resp_room && !d_cache_resp_valid;
     wire [31:0] mmio_resp_rdata;
-    wire nand_req_valid, nand_req_ready, nand_req_we, nand_resp_valid;
-    wire [7:0] nand_req_addr;
-    wire [3:0] nand_req_wstrb;
-    wire [31:0] nand_req_wdata, nand_resp_rdata;
 
-    mmio_tdm_bus_lite u_mmio(
+    mmio_tdm_bus u_mmio(
         .clk(clk),
         .rst(rst_hi),
         .req_valid(mmio_req_valid),
@@ -166,49 +145,21 @@ module mem_subsystem(
         .req_addr(d_req_vaddr),
         .req_wdata(d_req_wdata),
         .resp_valid(mmio_resp_valid),
-        .resp_ready(!d_resp_valid || d_resp_ready),
+        .resp_ready(mmio_resp_ready),
         .resp_rdata(mmio_resp_rdata),
         .resp_err(mmio_resp_err),
-        .ps2_empty(ps2_empty),
-        .ps2_full(ps2_full),
-        .ps2_overflow(ps2_overflow),
-        .ps2_shift(ps2_shift),
-        .ps2_caps_lock(ps2_caps),
-        .ps2_rdata(ps2_rdata),
-        .ps2_rd(ps2_rd),
-        .vga_we(vga_we),
-        .vga_addr(vga_addr),
-        .vga_wdata(vga_wdata),
-        .vga_rdata(vga_rdata),
-        .vga_busy(vga_busy),
+        .ps2_clk(ps2_clk),
+        .ps2_dat(ps2_dat),
+        .vga_clk(vga_clk),
+        .vga_r(vga_r),
+        .vga_g(vga_g),
+        .vga_b(vga_b),
+        .vga_hsync(vga_hsync),
+        .vga_vsync(vga_vsync),
+        .uart_tx(uart_tx),
+        .uart_rx(uart_rx),
+        .irq(irq),
         .timer_value(timer),
-        .uart_send(uart_send),
-        .uart_data(uart_data),
-        .uart_busy(uart_busy),
-        .nand_req_valid(nand_req_valid),
-        .nand_req_ready(nand_req_ready),
-        .nand_req_we(nand_req_we),
-        .nand_req_addr(nand_req_addr),
-        .nand_req_wstrb(nand_req_wstrb),
-        .nand_req_wdata(nand_req_wdata),
-        .nand_resp_valid(nand_resp_valid),
-        .nand_resp_rdata(nand_resp_rdata),
-        .led_value(led_value),
-        .diag_value(diag_value)
-    );
-
-    nand_ctrl_readonly u_nand(
-        .clk(clk),
-        .rst(rst_hi),
-        .mmio_req_ready(nand_req_ready),
-        .mmio_req_valid(nand_req_valid),
-        .mmio_req_we(nand_req_we),
-        .mmio_req_addr(nand_req_addr),
-        .mmio_req_wstrb(nand_req_wstrb),
-        .mmio_req_wdata(nand_req_wdata),
-        .mmio_resp_valid(nand_resp_valid),
-        .mmio_resp_ready(1'b1),
-        .mmio_resp_rdata(nand_resp_rdata),
         .nand_d(nand_d),
         .nand_cle(nand_cle),
         .nand_ale(nand_ale),
@@ -216,7 +167,48 @@ module mem_subsystem(
         .nand_re_n(nand_re_n),
         .nand_we_n(nand_we_n),
         .nand_wp_n(nand_wp_n),
-        .nand_rdy(nand_rdy)
+        .nand_rdy(nand_rdy),
+        .led_value(led_value),
+        .diag_value(diag_value)
+    );
+
+    icache_blocking u_icache(
+        .clk(clk),
+        .rst(rst),
+        .req_valid(i_cache_req_valid),
+        .req_ready(i_cache_req_ready),
+        .req_addr(i_req_vaddr),
+        .resp_valid(i_cache_resp_valid),
+        .resp_ready(i_cache_resp_ready),
+        .resp_inst(i_cache_resp_inst),
+        .mem_req_valid(i_cache_mem_req_valid),
+        .mem_req_ready(i_cache_mem_req_ready),
+        .mem_req_addr(i_cache_mem_req_addr),
+        .mem_resp_valid(i_cache_mem_resp_valid),
+        .mem_resp_rdata(i_cache_mem_resp_rdata)
+    );
+
+    dcache_blocking_lite u_dcache(
+        .clk(clk),
+        .rst(rst),
+        .req_valid(d_cache_req_valid),
+        .req_ready(d_cache_req_ready),
+        .req_we(d_req_we),
+        .req_size(d_req_size),
+        .req_wstrb(d_req_wstrb),
+        .req_addr(d_req_vaddr),
+        .req_wdata(d_req_wdata),
+        .resp_valid(d_cache_resp_valid),
+        .resp_ready(d_cache_resp_ready),
+        .resp_rdata(d_cache_resp_rdata),
+        .mem_req_valid(d_cache_mem_req_valid),
+        .mem_req_ready(d_cache_mem_req_ready),
+        .mem_req_we(d_cache_mem_req_we),
+        .mem_req_wstrb(d_cache_mem_req_wstrb),
+        .mem_req_addr(d_cache_mem_req_addr),
+        .mem_req_wdata(d_cache_mem_req_wdata),
+        .mem_resp_valid(d_cache_mem_resp_valid),
+        .mem_resp_rdata(d_cache_mem_resp_rdata)
     );
 
     ddr3_mig_bridge u_ddr3_bridge(
@@ -239,20 +231,21 @@ module mem_subsystem(
         .ddr3_dqs_p(ddr3_dqs_p),
         .ddr3_dm(ddr3_dm),
         .ddr3_odt(ddr3_odt),
-        .cpu_req_valid(ddr_req_valid),
-        .cpu_req_ready(ddr_req_ready),
-        .cpu_req_we(ddr_req_we),
-        .cpu_req_wstrb(ddr_req_wstrb),
-        .cpu_req_addr(ddr_req_addr),
-        .cpu_req_wdata(ddr_req_wdata),
-        .cpu_resp_valid(ddr_resp_valid),
-        .cpu_resp_ready(ddr_resp_ready),
-        .cpu_resp_rdata(ddr_resp_rdata)
+        .cpu_req_valid(bridge_req_valid),
+        .cpu_req_ready(bridge_req_ready),
+        .cpu_req_we(bridge_req_we),
+        .cpu_req_wstrb(bridge_req_wstrb),
+        .cpu_req_addr(bridge_req_addr),
+        .cpu_req_wdata(bridge_req_wdata),
+        .cpu_resp_valid(bridge_resp_valid),
+        .cpu_resp_ready(1'b1),
+        .cpu_resp_rdata(bridge_resp_rdata)
     );
 
-    assign i_req_ready = i_ddr_sel && ddr_req_ready;
+    assign i_req_ready = i_resp_room && i_cache_req_ready;
     assign d_req_ready = d_req_valid &&
-                         (d_is_mmio ? mmio_req_ready : (d_ddr_sel && ddr_req_ready));
+                         (d_is_mmio ? mmio_req_ready :
+                                      (d_resp_room && d_cache_req_ready));
 
     always @(posedge clk or negedge rst) begin
         if (!rst) begin
@@ -267,8 +260,10 @@ module mem_subsystem(
             d_resp_ecode <= 6'h0;
             i_resp_badv <= 32'h0;
             d_resp_badv <= 32'h0;
-            ddr_resp_is_d <= 1'b0;
-            ddr_resp_badv <= 32'h0;
+            i_cache_resp_badv <= 32'h0;
+            d_cache_resp_badv <= 32'h0;
+            bridge_resp_is_i <= 1'b0;
+            bridge_resp_is_write <= 1'b0;
         end else begin
             timer <= timer + 32'd1;
 
@@ -277,12 +272,20 @@ module mem_subsystem(
             if (d_resp_valid && d_resp_ready)
                 d_resp_valid <= 1'b0;
 
-            if (ddr_req_fire) begin
-                ddr_resp_is_d <= d_ddr_sel;
-                ddr_resp_badv <= ddr_req_addr;
+            if (i_cache_req_fire) begin
+                i_cache_resp_badv <= i_req_vaddr;
             end
 
-            if (mmio_resp_valid && (!d_resp_valid || d_resp_ready)) begin
+            if (d_cache_req_fire) begin
+                d_cache_resp_badv <= d_req_vaddr;
+            end
+
+            if (bridge_req_fire) begin
+                bridge_resp_is_i <= i_cache_mem_sel;
+                bridge_resp_is_write <= bridge_req_we;
+            end
+
+            if (mmio_resp_valid && mmio_resp_ready) begin
                 d_resp_valid <= 1'b1;
                 d_resp_rdata <= mmio_resp_rdata;
                 d_resp_exc_valid <= mmio_resp_err;
@@ -290,20 +293,20 @@ module mem_subsystem(
                 d_resp_badv <= d_req_vaddr;
             end
 
-            if (ddr_resp_valid && ddr_resp_ready) begin
-                if (ddr_resp_is_d) begin
-                    d_resp_valid <= 1'b1;
-                    d_resp_rdata <= ddr_resp_rdata;
-                    d_resp_exc_valid <= 1'b0;
-                    d_resp_ecode <= 6'h0;
-                    d_resp_badv <= ddr_resp_badv;
-                end else begin
-                    i_resp_valid <= 1'b1;
-                    i_resp_inst <= ddr_resp_rdata;
-                    i_resp_exc_valid <= 1'b0;
-                    i_resp_ecode <= 6'h0;
-                    i_resp_badv <= ddr_resp_badv;
-                end
+            if (i_cache_resp_valid && i_cache_resp_ready) begin
+                i_resp_valid <= 1'b1;
+                i_resp_inst <= i_cache_resp_inst;
+                i_resp_exc_valid <= 1'b0;
+                i_resp_ecode <= 6'h0;
+                i_resp_badv <= i_cache_resp_badv;
+            end
+
+            if (d_cache_resp_valid && d_cache_resp_ready) begin
+                d_resp_valid <= 1'b1;
+                d_resp_rdata <= d_cache_resp_rdata;
+                d_resp_exc_valid <= 1'b0;
+                d_resp_ecode <= 6'h0;
+                d_resp_badv <= d_cache_resp_badv;
             end
         end
     end
