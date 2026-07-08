@@ -1,15 +1,14 @@
 module MDU(
     input clk,
     input rst,
+    input en,
     input[2:0] mdu_op,
     input[31:0] A,
     input[31:0] B,
-    input issue,
-    input kill,
-    output busy,
-    output done,
-    output[31:0] res
     
+    output busy,
+    output ready,
+    output[31:0] mdu_res
     );
 
     booth_wallace u_muxer(.A(A),.B(B),.Product(mux_res));
