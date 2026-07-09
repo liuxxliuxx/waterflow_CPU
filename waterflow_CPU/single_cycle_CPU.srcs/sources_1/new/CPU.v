@@ -1,36 +1,118 @@
 `include "CPU_def.vh"
-module read_Instr(
-    input        clk,
-    input        rst,
-    input        branch,
-    input        stall,
-    input [31:0] branch_target,
-    output[31:0] pc_cur,
-    output[31:0] instr,
-    output[31:0] nxt_pc
-    );
-    
-    reg[31:0]  pc;
-    wire[31:0] next_pc;
-    
+
+module IFU(
+    input clk,
+    input rst,
+
+    input if_allowin,
+
+    input         redirect_valid,
+    input  [31:0] redirect_pc,
+
+    input         pred_taken,
+    input  [31:0] pred_target,
+
+    output        if_valid,
+    output [31:0] if_pc,
+    output [31:0] if_pc4,
+    output [31:0] if_inst,
+    output        if_err,
+
+    output        inst_req_valid,
+    input         inst_req_ready,
+    output [31:0] inst_req_vaddr,
+
+    input         inst_resp_valid,
+    input  [31:0] inst_resp_data,
+    input         inst_resp_err
+);
+    reg [31:0] fetch_pc;
+    reg        req_pending;
+    reg [31:0] req_pc_hold;
+
+    reg req_kill;
+    reg out_valid;
+    reg [31:0] out_pc;
+    reg [31:0] out_inst;
+    reg out_err;
+
+    wire[31:0] out_pc4 = out_pc + 32'd4;
+
+    wire out_fire = out_valid && if_allowin;
+
+    wire[31:0] pred_next_pc = pred_taken ? pred_target : out_pc4;
+
+    wire can_issue = !req_pending && (!out_valid || if_allowin);
+
+    wire [31:0] issue_pc =
+        redirect_valid ? redirect_pc :
+        (out_valid && if_allowin) ? pred_next_pc : fetch_pc;
+
+    assign inst_req_valid = can_issue;
+    assign inst_req_vaddr = issue_pc;
+
+    wire req_fire = inst_req_valid && inst_req_ready;
+
+    assign if_valid = out_valid;
+    assign if_pc    = out_pc;
+    assign if_pc4   = out_pc4;
+    assign if_inst  = out_inst;
+    assign if_err   = out_err;
+
     always @(posedge clk or negedge rst) begin
-        if(!rst)          pc <= 32'h1C000000;
-        else if(!stall)   pc <= next_pc;
+        if (!rst) begin
+            fetch_pc    <= 32'h1C000000;
+
+            req_pending <= 1'b0;
+            req_pc_hold <= 32'b0;
+            req_kill    <= 1'b0;
+
+            out_valid   <= 1'b0;
+            out_pc      <= 32'b0;
+            out_inst    <= 32'b0;
+            out_err     <= 1'b0;
+        end
+        else begin
+            if (redirect_valid) begin
+                fetch_pc  <= redirect_pc;
+                out_valid <= 1'b0;
+                out_pc    <= 32'b0;
+                out_inst  <= 32'b0;
+                out_err   <= 1'b0;
+
+                if (req_pending) begin
+                    req_kill <= 1'b1;
+                end
+            end
+
+            if (out_fire && !redirect_valid) begin
+                out_valid <= 1'b0;
+                fetch_pc  <= pred_next_pc;
+            end
+
+            if (inst_resp_valid && req_pending) begin
+                req_pending <= 1'b0;
+
+                if (req_kill || redirect_valid) begin
+                    req_kill <= 1'b0;
+                end
+                else begin
+                    out_valid <= 1'b1;
+                    out_pc    <= req_pc_hold;
+                    out_inst  <= inst_resp_data;
+                    out_err   <= inst_resp_err;
+                    req_kill  <= 1'b0;
+                end
+            end
+
+            if (req_fire) begin
+                req_pending <= 1'b1;
+                req_pc_hold <= inst_req_vaddr;
+                req_kill    <= 1'b0;
+            end
+        end
     end
-    
-    Instr_rom IR(.addr(pc[17:2]),.data(instr));
-    
-    adder instr_add(
-        .A  (pc),
-        .B  (32'd4),
-        .cin(1'b0),
-        .Sum(nxt_pc),
-        .cout()
-    );
-    
-    assign next_pc = branch ? branch_target : nxt_pc;
-    assign pc_cur  = pc;
-    
+
 endmodule
 
 module Control_Unit(
@@ -616,7 +698,10 @@ module EXU(
     output     [31:0] gp_to_fp_data,
 
     output     [31:0] branch_target,
-    output            take_branch
+    output            take_branch,
+    output branch_valid,
+    output branch_cond,
+    output branch_jirl
 );
 
     reg [31:0] op_b;
@@ -752,11 +837,16 @@ module EXU(
     BRU u_bru(
         .pc(pc),
         .imm32(imm32),
-        .branch(branch),
         .rdata1(rdata1),
         .rdata2(rdata2),
+        .branch(branch),
+
         .branch_target(branch_target),
-        .take_branch(take_branch)
+        .take_branch(take_branch),
+
+        .branch_valid(branch_valid),
+        .branch_cond(branch_cond),
+        .branch_jirl(branch_jirl)
     );
 
 endmodule
@@ -945,22 +1035,419 @@ module HazardUnit(
 
 endmodule
 
-module CPU(
-    input        clk,
-    input        rst,
-    input [4:0]  test_addr,
-    output[31:0] test_data,
-    output[31:0] test_pc_cur,
-    output[31:0] test_inst,
-    
-    output       bus_req,
-    output       bus_we,
-    output[31:0] bus_addr,
-    output[31:0] bus_wdata,
-    
-    input[31:0]  bus_rdata,
-    input        bus_ready
+module LSU(
+    input         clk,
+    input         rst,
+    input         flush,
+
+    input         mem_valid,
+    input         mem_en,
+    input         mem_wr,
+    input         mem_rd,
+    input  [1:0]  mem_size,      // 00 byte, 01 half, 10 word
+    input         mem_zero_ext,
+    input  [31:0] mem_addr,
+    input  [31:0] mem_wdata,
+
+    // MEM/WB是否已经接收LSU结果
+    input         result_taken,
+
+    // 给流水线的控制
+    output        mem_ready,
+    output        mem_stall,
+
+    // LSU输出给WB阶段的数据
+    output [31:0] load_data,
+    output        addr_err,
+    output        bus_err,
+
+    output        data_req_valid,
+    input         data_req_ready,
+    output        data_req_we,
+    output [31:0] data_req_vaddr,
+    output [31:0] data_req_wdata,
+    output [3:0]  data_req_wstrb,
+    output [1:0]  data_req_size,
+
+    input         data_resp_valid,
+    input  [31:0] data_resp_rdata,
+    input         data_resp_err
 );
+    
+    localparam MEM_BYTE = 2'd0;
+    localparam MEM_HALF = 2'd1;
+    localparam MEM_WORD = 2'd2;
+
+    wire byte_access = (mem_size == MEM_BYTE);
+    wire half_access = (mem_size == MEM_HALF);
+    wire word_access = (mem_size == MEM_WORD);
+
+    wire unalign_half = half_access && mem_addr[0];
+    wire unalign_word = word_access && (mem_addr[1:0] != 2'b00);
+
+    assign addr_err = mem_valid && mem_en && (unalign_half || unalign_word);
+
+    //写掩码
+    reg [3:0] wstrb;
+    always @(*) begin
+        case (mem_size)
+            MEM_BYTE: begin
+                case (mem_addr[1:0])
+                    2'b00:   wstrb = 4'b0001;
+                    2'b01:   wstrb = 4'b0010;
+                    2'b10:   wstrb = 4'b0100;
+                    2'b11:   wstrb = 4'b1000;
+                    default: wstrb = 4'b0000;
+                endcase
+            end
+
+            MEM_HALF: begin
+                case (mem_addr[1])
+                    1'b0:    wstrb = 4'b0011;
+                    1'b1:    wstrb = 4'b1100;
+                    default: wstrb = 4'b0000;
+                endcase
+            end
+
+            MEM_WORD: begin
+                wstrb = 4'b1111;
+            end
+
+            default: begin
+                wstrb = 4'b0000;
+            end
+        endcase
+    end
+
+    reg [31:0] store_wdata;
+    always @(*) begin
+        case (mem_size)
+            MEM_BYTE: begin
+                case (mem_addr[1:0])
+                    2'b00:   store_wdata = {24'b0, mem_wdata[7:0]};
+                    2'b01:   store_wdata = {16'b0, mem_wdata[7:0], 8'b0};
+                    2'b10:   store_wdata = {8'b0,  mem_wdata[7:0], 16'b0};
+                    2'b11:   store_wdata = {mem_wdata[7:0], 24'b0};
+                    default: store_wdata = 32'b0;
+                endcase
+            end
+
+            MEM_HALF: begin
+                case (mem_addr[1])
+                    1'b0:    store_wdata = {16'b0, mem_wdata[15:0]};
+                    1'b1:    store_wdata = {mem_wdata[15:0], 16'b0};
+                    default: store_wdata = 32'b0;
+                endcase
+            end
+
+            MEM_WORD: begin
+                store_wdata = mem_wdata;
+            end
+
+            default: begin
+                store_wdata = mem_wdata;
+            end
+        endcase
+    end
+
+    reg        req_pending;
+
+    reg [31:0] addr_hold;
+    reg [1:0]  size_hold;
+    reg        zero_ext_hold;
+    reg        rd_hold;
+    reg        wr_hold;
+
+    reg        done_valid;
+    reg [31:0] resp_data_hold;
+    reg        resp_err_hold;
+
+    wire need_req = mem_valid && mem_en && !addr_err;
+
+    assign data_req_valid = need_req && !req_pending && !done_valid;
+    assign data_req_we    = mem_wr;
+    assign data_req_vaddr = mem_addr;
+    assign data_req_wdata = store_wdata;
+    assign data_req_wstrb = mem_wr ? wstrb : 4'b0000;
+    assign data_req_size  = mem_size;
+
+    wire req_fire = data_req_valid && data_req_ready;
+
+    assign mem_ready = !mem_valid ||
+                       !mem_en    ||
+                       addr_err   ||
+                       done_valid;
+
+    assign mem_stall = mem_valid &&
+                       mem_en    &&
+                       !addr_err &&
+                       !done_valid;
+
+    always @(posedge clk or negedge rst) begin
+        if (!rst) begin
+            req_pending    <= 1'b0;
+
+            addr_hold      <= 32'b0;
+            size_hold      <= 2'b0;
+            zero_ext_hold  <= 1'b0;
+            rd_hold        <= 1'b0;
+            wr_hold        <= 1'b0;
+
+            done_valid     <= 1'b0;
+            resp_data_hold <= 32'b0;
+            resp_err_hold  <= 1'b0;
+        end
+        else if (flush) begin
+            req_pending    <= 1'b0;
+            done_valid     <= 1'b0;
+            resp_data_hold <= 32'b0;
+            resp_err_hold  <= 1'b0;
+        end
+        else begin
+            // MEM/WB 已经接收 LSU 结果，清掉 done_valid
+            if (result_taken) begin
+                done_valid <= 1'b0;
+            end
+
+            // 请求被总线接收
+            if (req_fire) begin
+                req_pending   <= 1'b1;
+
+                addr_hold     <= mem_addr;
+                size_hold     <= mem_size;
+                zero_ext_hold <= mem_zero_ext;
+                rd_hold       <= mem_rd;
+                wr_hold       <= mem_wr;
+            end
+
+            // 响应回来
+            if (data_resp_valid && req_pending) begin
+                req_pending    <= 1'b0;
+                done_valid     <= 1'b1;
+                resp_data_hold <= data_resp_rdata;
+                resp_err_hold  <= data_resp_err;
+            end
+        end
+    end
+
+    reg [7:0]  load_byte;
+    reg [15:0] load_half;
+    reg [31:0] load_result;
+
+    always @(*) begin
+        case (addr_hold[1:0])
+            2'b00:   load_byte = resp_data_hold[7:0];
+            2'b01:   load_byte = resp_data_hold[15:8];
+            2'b10:   load_byte = resp_data_hold[23:16];
+            2'b11:   load_byte = resp_data_hold[31:24];
+            default: load_byte = 8'b0;
+        endcase
+    end
+
+    always @(*) begin
+        case (addr_hold[1])
+            1'b0:    load_half = resp_data_hold[15:0];
+            1'b1:    load_half = resp_data_hold[31:16];
+            default: load_half = 16'b0;
+        endcase
+    end
+
+    always @(*) begin
+        case (size_hold)
+            MEM_BYTE: begin
+                if (zero_ext_hold)
+                    load_result = {24'b0, load_byte};
+                else
+                    load_result = {{24{load_byte[7]}}, load_byte};
+            end
+
+            MEM_HALF: begin
+                if (zero_ext_hold)
+                    load_result = {16'b0, load_half};
+                else
+                    load_result = {{16{load_half[15]}}, load_half};
+            end
+
+            MEM_WORD: begin
+                load_result = resp_data_hold;
+            end
+
+            default: begin
+                load_result = resp_data_hold;
+            end
+        endcase
+    end
+
+    assign load_data = load_result;
+
+    assign bus_err = done_valid && resp_err_hold;
+
+endmodule
+
+module CPU(
+    input         clk,
+    input         rst,
+
+    input  [4:0]  test_addr,
+    output [31:0] test_data,
+    output [31:0] test_pc_cur,
+    output [31:0] test_inst,
+
+    output        inst_req_valid,
+    input         inst_req_ready,
+    output [31:0] inst_req_vaddr,
+
+    input         inst_resp_valid,
+    input  [31:0] inst_resp_data,
+    input         inst_resp_err,
+
+
+    output        data_req_valid,
+    input         data_req_ready,
+    output        data_req_we,
+    output [31:0] data_req_vaddr,
+    output [31:0] data_req_wdata,
+    output [3:0]  data_req_wstrb,
+    output [1:0]  data_req_size,
+
+    input         data_resp_valid,
+    input  [31:0] data_resp_rdata,
+    input         data_resp_err
+);
+    
+    wire mem_stall;
+    wire ex_stall;
+    wire load_use_stall;
+
+
+    wire redirect_valid;
+    wire [31:0] redirect_pc;
+
+    wire if_allowin = !mem_stall && !ex_stall && !load_use_stall;
+    
+    wire        if_valid;
+    wire [31:0] if_pc;
+    wire [31:0] if_pc4;
+    wire [31:0] if_inst;
+    wire        if_err;
+
+    wire        bpu_pred_taken_raw;
+    wire [31:0] bpu_pred_target_raw;
+
+    wire        pred_taken  = if_valid ? bpu_pred_taken_raw  : 1'b0;
+    wire [31:0] pred_target = if_valid ? bpu_pred_target_raw : 32'b0;
+
+    IFU u_ifu(
+        .clk(clk),
+        .rst(rst),
+
+        .if_allowin(if_allowin),
+
+        .redirect_valid(redirect_valid),
+        .redirect_pc(redirect_pc),
+
+        .pred_taken(pred_taken),
+        .pred_target(pred_target),
+
+        .if_valid(if_valid),
+        .if_pc(if_pc),
+        .if_pc4(if_pc4),
+        .if_inst(if_inst),
+        .if_err(if_err),
+
+        .inst_req_valid(inst_req_valid),
+        .inst_req_ready(inst_req_ready),
+        .inst_req_vaddr(inst_req_vaddr),
+
+        .inst_resp_valid(inst_resp_valid),
+        .inst_resp_data(inst_resp_data),
+        .inst_resp_err(inst_resp_err)
+    );
+
+    wire        bpu_update_valid;
+    wire [31:0] bpu_update_pc;
+    wire        bpu_update_taken;
+    wire [31:0] bpu_update_target;
+    wire        bpu_update_is_cond;
+    wire        bpu_update_is_jirl;
+
+    BPU u_bpu(
+        .clk(clk),
+        .rst(rst),
+
+        .if_pc(if_pc),
+        .if_inst(if_inst),
+
+        .pred_taken(bpu_pred_taken_raw),
+        .pred_target(bpu_pred_target_raw),
+
+        .update_valid(bpu_update_valid),
+        .update_pc(bpu_update_pc),
+        .update_taken(bpu_update_taken),
+        .update_target(bpu_update_target),
+        .update_is_cond(bpu_update_is_cond),
+        .update_is_jirl(bpu_update_is_jirl)
+    );
+
+    reg        ifid_valid;
+    reg [31:0] ifid_pc;
+    reg [31:0] ifid_pc4;
+    reg [31:0] ifid_inst;
+    reg        ifid_fetch_err;
+
+    reg        ifid_pred_taken;
+    reg [31:0] ifid_pred_target;
+
+    always @(posedge clk or negedge rst) begin
+        if (!rst) begin
+            ifid_valid       <= 1'b0;
+            ifid_pc          <= 32'b0;
+            ifid_pc4         <= 32'b0;
+            ifid_inst        <= 32'b0;
+            ifid_fetch_err   <= 1'b0;
+            ifid_pred_taken  <= 1'b0;
+            ifid_pred_target <= 32'b0;
+        end
+        else if (redirect_valid) begin
+            ifid_valid       <= 1'b0;
+            ifid_pc          <= 32'b0;
+            ifid_pc4         <= 32'b0;
+            ifid_inst        <= 32'b0;
+            ifid_fetch_err   <= 1'b0;
+            ifid_pred_taken  <= 1'b0;
+            ifid_pred_target <= 32'b0;
+        end
+        else if (mem_stall || ex_stall || load_use_stall) begin
+            ifid_valid       <= ifid_valid;
+            ifid_pc          <= ifid_pc;
+            ifid_pc4         <= ifid_pc4;
+            ifid_inst        <= ifid_inst;
+            ifid_fetch_err   <= ifid_fetch_err;
+            ifid_pred_taken  <= ifid_pred_taken;
+            ifid_pred_target <= ifid_pred_target;
+        end
+        else if (if_valid) begin
+            ifid_valid       <= 1'b1;
+            ifid_pc          <= if_pc;
+            ifid_pc4         <= if_pc4;
+            ifid_inst        <= if_inst;
+            ifid_fetch_err   <= if_err;
+            ifid_pred_taken  <= pred_taken;
+            ifid_pred_target <= pred_target;
+        end
+        else begin
+            ifid_valid       <= 1'b0;
+            ifid_pc          <= 32'b0;
+            ifid_pc4         <= 32'b0;
+            ifid_inst        <= 32'b0;
+            ifid_fetch_err   <= 1'b0;
+            ifid_pred_taken  <= 1'b0;
+            ifid_pred_target <= 32'b0;
+        end
+    end
+
+    
+    
     
     wire[31:0] pc_cur;
     wire[31:0] nxt_pc;
