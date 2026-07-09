@@ -18,6 +18,7 @@ module nand_ctrl_readonly #(
     output reg mmio_resp_valid,
     input wire mmio_resp_ready,
     output reg [31:0] mmio_resp_rdata,
+    output wire mmio_resp_err,
     inout wire [7:0] nand_d,
     output wire nand_cle,
     output wire nand_ale,
@@ -39,6 +40,7 @@ module nand_ctrl_readonly #(
     wire req_fire = mmio_req_valid && mmio_req_ready;
 
     assign mmio_req_ready = !mmio_resp_valid || mmio_resp_ready;
+    assign mmio_resp_err = mmio_resp_valid && error;
 
     nand_val_core #(
         .INITIAL_WORD_INDEX(INITIAL_WORD_INDEX),
