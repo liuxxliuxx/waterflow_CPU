@@ -10,48 +10,131 @@ module MDU(
 
     output busy,
     output ready,
-    output [31:0] mdu_res
+    output [31:0] mdu_res,
+    output error
     );
 
-    reg        ready_r;
-    reg [31:0] result_r;
+    reg  [2:0]  op_r;
+    reg  [31:0] a_r;
+    reg  [31:0] b_r;
+    reg  [31:0] result_hold;
+    reg         invalid_ready_r;
 
-    wire signed [63:0] signed_product =
-        $signed({{32{A[31]}}, A}) * $signed({{32{B[31]}}, B});
-    wire        [63:0] unsigned_product = A * B;
+    wire op_is_mul = (mdu_op == `MDU_MULW)   ||
+                     (mdu_op == `MDU_MULHW)  ||
+                     (mdu_op == `MDU_MULHWU);
 
-    wire [31:0] abs_A = A[31] ? (~A + 32'd1) : A;
-    wire [31:0] abs_B = B[31] ? (~B + 32'd1) : B;
-    wire [31:0] divw_abs_q = (B == 32'b0) ? 32'b0 : abs_A / abs_B;
-    wire [31:0] modw_abs_r = (B == 32'b0) ? 32'b0 : abs_A % abs_B;
-    wire [31:0] divw_result = (A[31] ^ B[31]) ? (~divw_abs_q + 32'd1) : divw_abs_q;
-    wire [31:0] modw_result = A[31] ? (~modw_abs_r + 32'd1) : modw_abs_r;
+    wire op_is_div = (mdu_op == `MDU_DIVW)   ||
+                     (mdu_op == `MDU_MODW)   ||
+                     (mdu_op == `MDU_DIVWU)  ||
+                     (mdu_op == `MDU_MODWU);
 
-    assign ready   = ready_r;
-    assign busy    = en && !ready_r;
-    assign mdu_res = result_r;
+    wire mul_start = en && op_is_mul;
+    wire div_start = en && op_is_div;
+
+    wire        mul_busy;
+    wire        mul_ready;
+    wire [63:0] mul_product_signed;
+
+    booth_wallace u_mul_pipe(
+        .clk     (clk),
+        .rst     (rst),
+        .start   (mul_start),
+        .A       (A),
+        .B       (B),
+        .busy    (mul_busy),
+        .ready   (mul_ready),
+        .Product (mul_product_signed)
+    );
+
+    wire        div_busy;
+    wire        div_ready;
+    wire [31:0] div_quotient;
+    wire [31:0] div_remainder;
+    wire        div_signed = (mdu_op == `MDU_DIVW) || (mdu_op == `MDU_MODW);
+
+    diver u_diver(
+        .clk         (clk),
+        .rst         (rst),
+        .start       (div_start),
+        .signed_mode (div_signed),
+        .A           (A),
+        .B           (B),
+        .busy        (div_busy),
+        .ready       (div_ready),
+        .quotient    (div_quotient),
+        .remainder   (div_remainder),
+        .error       (error)
+    );
+
+    wire [31:0] unsigned_high_fix =
+        mul_product_signed[63:32] +
+        (a_r[31] ? b_r : 32'b0) +
+        (b_r[31] ? a_r : 32'b0);
+
+    reg [31:0] mul_result;
+    always @(*) begin
+        case (op_r)
+            `MDU_MULW:   mul_result = mul_product_signed[31:0];
+            `MDU_MULHW:  mul_result = mul_product_signed[63:32];
+            `MDU_MULHWU: mul_result = unsigned_high_fix;
+            default:     mul_result = 32'b0;
+        endcase
+    end
+
+    reg [31:0] div_result;
+    always @(*) begin
+        case (op_r)
+            `MDU_DIVW,
+            `MDU_DIVWU: div_result = div_quotient;
+            `MDU_MODW,
+            `MDU_MODWU: div_result = div_remainder;
+            default:    div_result = 32'b0;
+        endcase
+    end
+
+    wire op_ready = mul_ready || div_ready || invalid_ready_r;
+    wire [31:0] ready_result =
+        mul_ready       ? mul_result :
+        div_ready       ? div_result :
+        invalid_ready_r ? 32'b0     :
+                          result_hold;
+
+    assign ready   = op_ready;
+    assign busy    = mul_busy || div_busy;
+    assign mdu_res = op_ready ? ready_result : result_hold;
 
     always @(posedge clk or negedge rst) begin
         if (!rst) begin
-            ready_r  <= 1'b0;
-            result_r <= 32'b0;
+            op_r            <= `MDU_NONE;
+            a_r             <= 32'b0;
+            b_r             <= 32'b0;
+            result_hold     <= 32'b0;
+            invalid_ready_r <= 1'b0;
         end
         else begin
-            ready_r <= en;
+            invalid_ready_r <= 1'b0;
 
             if (en) begin
-                case (mdu_op)
-                    `MDU_MULW:   result_r <= signed_product[31:0];
-                    `MDU_MULHW:  result_r <= signed_product[63:32];
-                    `MDU_MULHWU: result_r <= unsigned_product[63:32];
-                    `MDU_DIVW:   result_r <= divw_result;
-                    `MDU_MODW:   result_r <= modw_result;
-                    `MDU_DIVWU:  result_r <= (B == 32'b0) ? 32'b0 : A / B;
-                    `MDU_MODWU:  result_r <= (B == 32'b0) ? 32'b0 : A % B;
-                    default:     result_r <= 32'b0;
-                endcase
+                op_r <= mdu_op;
+                a_r  <= A;
+                b_r  <= B;
+
+                if (!op_is_mul && !op_is_div) begin
+                    result_hold     <= 32'b0;
+                    invalid_ready_r <= 1'b1;
+                end
+            end
+            else if (mul_ready) begin
+                result_hold <= mul_result;
+            end
+            else if (div_ready) begin
+                result_hold <= div_result;
             end
         end
     end
 
 endmodule
+
+
+

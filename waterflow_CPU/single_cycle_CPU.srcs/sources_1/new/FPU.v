@@ -11,10 +11,32 @@ module FPU(
     output        ready,
     output        busy,
     output [31:0] fpu_res
-    );
+);
 
     reg        ready_r;
     reg [31:0] result_r;
+
+    wire [31:0] add_res;
+    wire [31:0] sub_res;
+    wire [31:0] mul_res;
+
+    fp_add_s u_fp_add_s(
+        .A(A),
+        .B(B),
+        .R(add_res)
+    );
+
+    fp_sub_s u_fp_sub_s(
+        .A(A),
+        .B(B),
+        .R(sub_res)
+    );
+
+    fp_mul_s u_fp_mul_s(
+        .A(A),
+        .B(B),
+        .R(mul_res)
+    );
 
     assign ready   = ready_r;
     assign busy    = en && !ready_r;
@@ -31,6 +53,9 @@ module FPU(
             if (en) begin
                 case (fpu_op)
                     `FP_movs: result_r <= A;
+                    `FP_adds: result_r <= add_res;
+                    `FP_subs: result_r <= sub_res;
+                    `FP_muls: result_r <= mul_res;
                     default:  result_r <= 32'b0;
                 endcase
             end
