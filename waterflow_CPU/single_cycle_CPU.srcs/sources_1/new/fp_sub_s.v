@@ -4,13 +4,10 @@ module fp_sub_s(
     output [31:0] R
 );
 
-    wire [31:0] B_neg;
-
-    assign B_neg = {~B[31], B[30:0]};
-
     fp_add_s u_sub_add(
+        .sub(1'b1),
         .A(A),
-        .B(B_neg),
+        .B(B),
         .R(R)
     );
 
