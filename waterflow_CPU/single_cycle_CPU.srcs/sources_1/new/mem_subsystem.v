@@ -9,9 +9,7 @@ module mem_subsystem(
     output reg i_resp_valid,
     input wire i_resp_ready,
     output reg [31:0] i_resp_inst,
-    output reg i_resp_exc_valid,
-    output reg [5:0] i_resp_ecode,
-    output reg [31:0] i_resp_badv,
+    output wire resp_exc_valid,
     input wire d_req_valid,
     output wire d_req_ready,
     input wire d_req_we,
@@ -22,9 +20,6 @@ module mem_subsystem(
     output reg d_resp_valid,
     input wire d_resp_ready,
     output reg [31:0] d_resp_rdata,
-    output reg d_resp_exc_valid,
-    output reg [5:0] d_resp_ecode,
-    output reg [31:0] d_resp_badv,
     input wire ps2_clk,
     input wire ps2_dat,
     input wire vga_clk,
@@ -66,27 +61,52 @@ module mem_subsystem(
     output wire [0:0] ddr3_odt
 );
     reg [31:0] timer;
-    reg [31:0] i_cache_resp_badv;
-    reg [31:0] d_cache_resp_badv;
+    reg i_resp_exc;
+    reg d_resp_exc;
     reg bridge_resp_is_i;
     reg bridge_resp_is_write;
 
     wire rst_hi = !rst;
 
-    wire d_is_mmio =
-        (d_req_vaddr[31:16] == 16'h1fe0) ||
-        (d_req_vaddr[31:16] == 16'h1fe1) ||
-        (d_req_vaddr[31:16] == 16'h1fe2) ||
-        (d_req_vaddr[31:16] == 16'h1fe3) ||
-        (d_req_vaddr[31:16] == 16'h1fe6) ||
-        (d_req_vaddr[31:16] == 16'h1fd0);
+    localparam [31:0] NOP_INST = 32'h0340_0000;
+
+    function is_mmio_addr;
+        input [31:0] addr;
+        begin
+            is_mmio_addr =
+                (addr[31:16] == 16'h1fe0) ||
+                (addr[31:16] == 16'h1fe1) ||
+                (addr[31:16] == 16'h1fe2) ||
+                (addr[31:16] == 16'h1fe3) ||
+                (addr[31:16] == 16'h1fe6) ||
+                (addr[31:16] == 16'h1fd0);
+        end
+    endfunction
+
+    function is_mem_addr;
+        input [31:0] addr;
+        begin
+            is_mem_addr = (addr[31:29] == 3'b000) && (addr[28:24] != 5'h1f);
+        end
+    endfunction
+
+    wire i_addr_is_mem = is_mem_addr(i_req_vaddr);
+    wire d_addr_is_mem = is_mem_addr(d_req_vaddr);
+    wire d_is_mmio = is_mmio_addr(d_req_vaddr);
+    wire i_addr_exc = !i_addr_is_mem || (i_req_vaddr[1:0] != 2'b00);
+    wire d_addr_unaligned =
+        ((d_req_size == 2'b01) && d_req_vaddr[0]) ||
+        ((d_req_size == 2'b10) && (d_req_vaddr[1:0] != 2'b00));
+    wire d_addr_exc =
+        !(d_addr_is_mem || d_is_mmio) ||
+        d_addr_unaligned ||
+        (d_is_mmio && (d_req_vaddr[1:0] != 2'b00));
 
     wire i_resp_room = !i_resp_valid || i_resp_ready;
     wire d_resp_room = !d_resp_valid || d_resp_ready;
 
-    wire i_cache_req_valid = i_req_valid && i_resp_room;
+    wire i_cache_req_valid = i_req_valid && !i_addr_exc && i_resp_room;
     wire i_cache_req_ready;
-    wire i_cache_req_fire = i_cache_req_valid && i_cache_req_ready;
     wire i_cache_resp_valid;
     wire i_cache_resp_ready = i_resp_room;
     wire [31:0] i_cache_resp_inst;
@@ -96,9 +116,8 @@ module mem_subsystem(
     wire i_cache_mem_resp_valid;
     wire [31:0] i_cache_mem_resp_rdata;
 
-    wire d_cache_req_valid = d_req_valid && !d_is_mmio && d_resp_room;
+    wire d_cache_req_valid = d_req_valid && !d_addr_exc && !d_is_mmio && d_resp_room;
     wire d_cache_req_ready;
-    wire d_cache_req_fire = d_cache_req_valid && d_cache_req_ready;
     wire d_cache_resp_valid;
     wire d_cache_resp_ready = d_resp_room;
     wire [31:0] d_cache_resp_rdata;
@@ -130,10 +149,17 @@ module mem_subsystem(
     assign d_cache_mem_resp_rdata = bridge_resp_rdata;
     assign i_cache_mem_resp_rdata = bridge_resp_rdata;
 
-    wire mmio_req_valid = d_req_valid && d_is_mmio && d_req_ready;
+    wire mmio_req_valid = d_req_valid && !d_addr_exc && d_is_mmio && d_resp_room;
     wire mmio_req_ready, mmio_resp_valid, mmio_resp_err;
     wire mmio_resp_ready = d_resp_room && !d_cache_resp_valid;
     wire [31:0] mmio_resp_rdata;
+
+    wire i_resp_incoming = i_cache_resp_valid;
+    wire d_resp_incoming = d_cache_resp_valid || mmio_resp_valid;
+    wire i_accept_room = i_resp_room && !i_resp_incoming;
+    wire d_accept_room = d_resp_room && !d_resp_incoming;
+    wire i_exc_req_fire = i_req_valid && i_accept_room && i_addr_exc;
+    wire d_exc_req_fire = d_req_valid && d_accept_room && d_addr_exc;
 
     mmio_tdm_bus u_mmio(
         .clk(clk),
@@ -242,42 +268,37 @@ module mem_subsystem(
         .cpu_resp_rdata(bridge_resp_rdata)
     );
 
-    assign i_req_ready = i_resp_room && i_cache_req_ready;
-    assign d_req_ready = d_req_valid &&
-                         (d_is_mmio ? mmio_req_ready :
-                                      (d_resp_room && d_cache_req_ready));
+    assign resp_exc_valid = (i_resp_valid && i_resp_exc) ||
+                            (d_resp_valid && d_resp_exc);
+
+    assign i_req_ready = i_resp_room &&
+                         (i_addr_exc ? !i_resp_incoming : i_cache_req_ready);
+    assign d_req_ready = d_req_valid && d_resp_room &&
+                         (d_addr_exc ? !d_resp_incoming :
+                          (d_is_mmio ? (!d_cache_resp_valid && mmio_req_ready) :
+                                       d_cache_req_ready));
 
     always @(posedge clk or negedge rst) begin
         if (!rst) begin
             i_resp_valid <= 1'b0;
             d_resp_valid <= 1'b0;
             timer <= 32'h0;
-            i_resp_inst <= 32'h0340_0000;
+            i_resp_inst <= NOP_INST;
             d_resp_rdata <= 32'h0;
-            i_resp_exc_valid <= 1'b0;
-            d_resp_exc_valid <= 1'b0;
-            i_resp_ecode <= 6'h0;
-            d_resp_ecode <= 6'h0;
-            i_resp_badv <= 32'h0;
-            d_resp_badv <= 32'h0;
-            i_cache_resp_badv <= 32'h0;
-            d_cache_resp_badv <= 32'h0;
+            i_resp_exc <= 1'b0;
+            d_resp_exc <= 1'b0;
             bridge_resp_is_i <= 1'b0;
             bridge_resp_is_write <= 1'b0;
         end else begin
             timer <= timer + 32'd1;
 
-            if (i_resp_valid && i_resp_ready)
+            if (i_resp_valid && i_resp_ready) begin
                 i_resp_valid <= 1'b0;
-            if (d_resp_valid && d_resp_ready)
-                d_resp_valid <= 1'b0;
-
-            if (i_cache_req_fire) begin
-                i_cache_resp_badv <= i_req_vaddr;
+                i_resp_exc <= 1'b0;
             end
-
-            if (d_cache_req_fire) begin
-                d_cache_resp_badv <= d_req_vaddr;
+            if (d_resp_valid && d_resp_ready) begin
+                d_resp_valid <= 1'b0;
+                d_resp_exc <= 1'b0;
             end
 
             if (bridge_req_fire) begin
@@ -285,28 +306,34 @@ module mem_subsystem(
                 bridge_resp_is_write <= bridge_req_we;
             end
 
+            if (i_exc_req_fire) begin
+                i_resp_valid <= 1'b1;
+                i_resp_inst <= NOP_INST;
+                i_resp_exc <= 1'b1;
+            end
+
+            if (d_exc_req_fire) begin
+                d_resp_valid <= 1'b1;
+                d_resp_rdata <= 32'h0;
+                d_resp_exc <= 1'b1;
+            end
+
             if (mmio_resp_valid && mmio_resp_ready) begin
                 d_resp_valid <= 1'b1;
                 d_resp_rdata <= mmio_resp_rdata;
-                d_resp_exc_valid <= mmio_resp_err;
-                d_resp_ecode <= 6'd8;
-                d_resp_badv <= d_req_vaddr;
+                d_resp_exc <= mmio_resp_err;
             end
 
             if (i_cache_resp_valid && i_cache_resp_ready) begin
                 i_resp_valid <= 1'b1;
                 i_resp_inst <= i_cache_resp_inst;
-                i_resp_exc_valid <= 1'b0;
-                i_resp_ecode <= 6'h0;
-                i_resp_badv <= i_cache_resp_badv;
+                i_resp_exc <= 1'b0;
             end
 
             if (d_cache_resp_valid && d_cache_resp_ready) begin
                 d_resp_valid <= 1'b1;
                 d_resp_rdata <= d_cache_resp_rdata;
-                d_resp_exc_valid <= 1'b0;
-                d_resp_ecode <= 6'h0;
-                d_resp_badv <= d_cache_resp_badv;
+                d_resp_exc <= 1'b0;
             end
         end
     end
