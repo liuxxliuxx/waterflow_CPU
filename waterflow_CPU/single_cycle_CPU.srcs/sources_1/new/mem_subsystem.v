@@ -99,8 +99,7 @@ module mem_subsystem(
         ((d_req_size == 2'b10) && (d_req_vaddr[1:0] != 2'b00));
     wire d_addr_exc =
         !(d_addr_is_mem || d_is_mmio) ||
-        d_addr_unaligned ||
-        (d_is_mmio && (d_req_vaddr[1:0] != 2'b00));
+        d_addr_unaligned;
 
     wire i_resp_room = !i_resp_valid || i_resp_ready;
     wire d_resp_room = !d_resp_valid || d_resp_ready;
