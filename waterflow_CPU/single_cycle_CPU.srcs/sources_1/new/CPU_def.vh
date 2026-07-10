@@ -77,7 +77,9 @@
 `define ECODE_BRK     6'h0c
 `define ECODE_INE     6'h0d
 `define ECODE_IPE     6'h0e
+`define ECODE_FPD     6'h0f
 `define ECODE_ADEM    6'h10   // 数据访存总线/地址错误，简化用
+`define ECODE_FPE     6'h12
 
 `define SP_NONE       3'd0
 `define SP_ERTN       3'd1
