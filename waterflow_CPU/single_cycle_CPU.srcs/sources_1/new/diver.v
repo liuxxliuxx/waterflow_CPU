@@ -165,6 +165,7 @@ module diver(
         else begin
             ready_r <= 1'b0;
             if (start && !busy_r) begin
+                error           <= 1'b0;
                 quotient_neg_r  <= quotient_neg_w;
                 remainder_neg_r <= remainder_neg_w;
                 dividend_r      <= abs_a;
