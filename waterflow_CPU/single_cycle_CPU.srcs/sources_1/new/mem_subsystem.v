@@ -213,7 +213,7 @@ module mem_subsystem(
         .mem_resp_rdata(i_cache_mem_resp_rdata)
     );
 
-    dcache_blocking_lite u_dcache(
+    dcache_blocking u_dcache(
         .clk(clk),
         .rst(rst),
         .req_valid(d_cache_req_valid),

@@ -61,41 +61,109 @@ module ALU(
     wire[31:0] masknez_res= (B!=32'd0) ? 32'd0 : A;
     wire[31:0] pcalau_res = {add_res[31:12],12'd0};
 
-    function [31:0] clz32;
+    function [5:0] clz32;
         input [31:0] x;
-        integer i;
-        reg found;
+        reg [15:0] v16;
+        reg [7:0]  v8;
+        reg [3:0]  v4;
+        reg [1:0]  v2;
         begin
-            clz32 = 32'd0;
-            found = 1'b0;
-            for (i = 31; i >= 0; i = i - 1) begin
-                if (!found) begin
-                    if (x[i])
-                        found = 1'b1;
-                    else
-                        clz32 = clz32 + 32'd1;
+            if (x == 32'b0) begin
+                clz32 = 6'd32;
+            end
+            else begin
+                clz32 = 6'd0;
+
+                if (x[31:16] == 16'b0) begin
+                    clz32 = clz32 + 6'd16;
+                    v16 = x[15:0];
+                end
+                else begin
+                    v16 = x[31:16];
+                end
+
+                if (v16[15:8] == 8'b0) begin
+                    clz32 = clz32 + 6'd8;
+                    v8 = v16[7:0];
+                end
+                else begin
+                    v8 = v16[15:8];
+                end
+
+                if (v8[7:4] == 4'b0) begin
+                    clz32 = clz32 + 6'd4;
+                    v4 = v8[3:0];
+                end
+                else begin
+                    v4 = v8[7:4];
+                end
+
+                if (v4[3:2] == 2'b0) begin
+                    clz32 = clz32 + 6'd2;
+                    v2 = v4[1:0];
+                end
+                else begin
+                    v2 = v4[3:2];
+                end
+
+                if (v2[1] == 1'b0) begin
+                    clz32 = clz32 + 6'd1;
                 end
             end
         end
     endfunction
 
-    function [31:0] ctz32;
-        input [31:0] x;
-        integer i;
-        reg found;
-        begin
-            ctz32 = 32'd0;
-            found = 1'b0;
-            for (i = 0; i < 32; i = i + 1) begin
-                if (!found) begin
-                    if (x[i])
-                        found = 1'b1;
-                    else
-                        ctz32 = ctz32 + 32'd1;
-                end
+    function [5:0] ctz32;
+    input [31:0] x;
+    reg [15:0] v16;
+    reg [7:0]  v8;
+    reg [3:0]  v4;
+    reg [1:0]  v2;
+    begin
+        if (x == 32'b0) begin
+            ctz32 = 6'd32;
+        end
+        else begin
+            ctz32 = 6'd0;
+
+            if (x[15:0] == 16'b0) begin
+                ctz32 = ctz32 + 6'd16;
+                v16 = x[31:16];
+            end
+            else begin
+                v16 = x[15:0];
+            end
+
+            if (v16[7:0] == 8'b0) begin
+                ctz32 = ctz32 + 6'd8;
+                v8 = v16[15:8];
+            end
+            else begin
+                v8 = v16[7:0];
+            end
+
+            if (v8[3:0] == 4'b0) begin
+                ctz32 = ctz32 + 6'd4;
+                v4 = v8[7:4];
+            end
+            else begin
+                v4 = v8[3:0];
+            end
+
+            if (v4[1:0] == 2'b0) begin
+                ctz32 = ctz32 + 6'd2;
+                v2 = v4[3:2];
+            end
+            else begin
+                v2 = v4[1:0];
+            end
+
+            if (v2[0] == 1'b0) begin
+                ctz32 = ctz32 + 6'd1;
             end
         end
-    endfunction
+    end
+endfunction
 
     wire [31:0] clz_res = clz32(A);
     wire [31:0] ctz_res = ctz32(A);
