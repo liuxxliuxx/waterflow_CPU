@@ -1,10 +1,10 @@
 -- Copyright 1986-2019 Xilinx, Inc. All Rights Reserved.
 -- --------------------------------------------------------------------------------
 -- Tool Version: Vivado v.2019.2 (win64) Build 2708876 Wed Nov  6 21:40:23 MST 2019
--- Date        : Tue Jul  7 16:51:03 2026
--- Host        : DESKTOP-G1NJMEK running 64-bit major release  (build 9200)
--- Command     : write_vhdl -force -mode synth_stub {c:/Users/hk/Desktop/summer
---               practice/ddr_test/ddr_test/ddr_test.srcs/sources_1/ip/mig_7series_0/mig_7series_0_stub.vhdl}
+-- Date        : Fri Jul 10 22:15:19 2026
+-- Host        : LAPTOP-LIUXX running 64-bit major release  (build 9200)
+-- Command     : write_vhdl -force -mode synth_stub
+--               C:/Users/liuxx/Desktop/small_term/waterflow_CPU/waterflow_CPU/single_cycle_CPU.srcs/sources_1/ip/mig_7series_0/mig_7series_0_stub.vhdl
 -- Design      : mig_7series_0
 -- Purpose     : Stub declaration of top-level module interface
 -- Device      : xc7a200tfbg676-1

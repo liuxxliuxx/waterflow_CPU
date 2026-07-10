@@ -1013,10 +1013,10 @@ module HazardUnit(
     input      [4:0] ex_waddr,
 
     //ex/mem寄存器内信息
-    input            mem_valid,
-    input            mem_regWr,
-    input            mem_memRd,
-    input      [4:0] mem_waddr,
+    input            exmem_valid,
+    input            exmem_regWr,
+    input            exmem_memRd,
+    input      [4:0] exmem_regwaddr,
 
     //mem/wb寄存器内信息
     input            wb_valid,
@@ -1038,7 +1038,7 @@ module HazardUnit(
     always @(*) begin
         forwardA = FWD_NONE;
 
-        if(ex_valid && ex_src1_used && mem_valid && mem_regWr && !mem_memRd && (mem_waddr != 5'd0) && (mem_waddr == ex_rs1)) begin
+        if(ex_valid && ex_src1_used && exmem_valid && exmem_regWr && !exmem_memRd && (exmem_regwaddr != 5'd0) && (exmem_regwaddr == ex_rs1)) begin
             forwardA = FWD_EXMEM;
         end
         else if(ex_valid && ex_src1_used && wb_valid && wb_regWr && (wb_waddr != 5'd0) && (wb_waddr == ex_rs1)) begin
@@ -1049,7 +1049,7 @@ module HazardUnit(
     always @(*) begin
         forwardB = FWD_NONE;
 
-        if(ex_valid && ex_src2_used && mem_valid && mem_regWr && !mem_memRd && (mem_waddr != 5'd0) && (mem_waddr == ex_rs2)) begin
+        if(ex_valid && ex_src2_used && exmem_valid && exmem_regWr && !exmem_memRd && (exmem_regwaddr != 5'd0) && (exmem_regwaddr == ex_rs2)) begin
             forwardB = FWD_EXMEM;
         end
         else if(ex_valid && ex_src2_used && wb_valid && wb_regWr && (wb_waddr != 5'd0) && (wb_waddr == ex_rs2)) begin
@@ -1418,7 +1418,7 @@ module CSRFile(
 
     always @(posedge clk or negedge rst) begin
         if (!rst) begin
-            csr_crmd       <= 32'b0;
+            csr_crmd       <= 32'd8;
             csr_prmd       <= 32'b0;
             csr_ecfg       <= 32'b0;
             csr_estat      <= 32'b0;
@@ -1545,6 +1545,7 @@ module CPU(
     wire mem_stall;
     wire ex_stall;
     wire load_use_stall;
+    wire csr_stall;
 
 
     wire redirect_valid;
@@ -1577,7 +1578,7 @@ module CPU(
     wire [1:0]  csr_commit_op;
     wire [31:0] csr_commit_wdata;
     wire [31:0] csr_commit_wmask;
-    wire        csr_stall;
+    
 
     wire        exc_commit;
     wire [31:0] exc_commit_pc;
@@ -1636,6 +1637,21 @@ module CPU(
     reg [1:0]  idex_MemSz;
     reg        idex_MemZeroExt;
 
+    reg        idex_FpRegWr;
+    reg [1:0]  idex_FPWB_Sel;
+
+    reg [4:0]  idex_fp_rs1;
+    reg [4:0]  idex_fp_rs2;
+    reg [4:0]  idex_fp_waddr;
+
+    reg [31:0] idex_fp_rdata1;
+    reg [31:0] idex_fp_rdata2;
+
+    reg        idex_FpSrc1Used;
+    reg        idex_FpSrc2Used;
+
+    reg        idex_MemSel;
+
     reg [3:0]  idex_WB_Sel;
 
     reg        idex_Src1Used;
@@ -1667,7 +1683,7 @@ module CPU(
     reg [31:0] exmem_ex_res;
     reg [31:0] exmem_store_data;
     reg [31:0] exmem_pc4;
-    reg [4:0]  exmem_waddr;
+    reg [4:0]  exmem_regwaddr;
 
     reg        exmem_regWr;
 
@@ -1703,11 +1719,21 @@ module CPU(
 
     reg [31:0] exmem_timer_data; 
 
+    reg        exmem_FpRegWr;
+    reg [1:0]  exmem_FPWB_Sel;
+    reg [4:0]  exmem_fp_waddr;
+
+    reg [31:0] exmem_gp_to_fp_data;
+
 
     reg        memwb_valid;
     reg        memwb_regWr;
     reg [4:0]  memwb_waddr;
     reg [31:0] memwb_wdata;
+
+    reg        memwb_FpRegWr;
+    reg [4:0]  memwb_fp_waddr;
+    reg [31:0] memwb_fp_wdata;
 
 
 
@@ -2040,6 +2066,32 @@ module CPU(
         .test_data(test_data)
     );
 
+
+    wire [4:0] id_fp_rs1   = id_inst[9:5];
+    wire [4:0] id_fp_rs2   = id_FpSrc2 ? id_inst[4:0] : id_inst[14:10];
+    wire [4:0] id_fp_waddr = id_inst[4:0];
+
+    wire [31:0] id_fp_rdata1_raw;
+    wire [31:0] id_fp_rdata2_raw;
+    wire [31:0] fp_test_data_unused;
+
+    freg_32bit u_freg(
+        .clk(clk),
+        .rst(rst),
+
+        .raddr1(id_fp_rs1),
+        .raddr2(id_fp_rs2),
+        .rdata1(id_fp_rdata1_raw),
+        .rdata2(id_fp_rdata2_raw),
+
+        .wen(memwb_valid && memwb_FpRegWr),
+        .waddr(memwb_fp_waddr),
+        .wdata(memwb_fp_wdata),
+
+        .test_addr(test_addr),
+        .test_data(fp_test_data_unused)
+    );
+
     wire [31:0] id_rdata1 =
         (ifid_valid && id_Src1Used &&
         memwb_valid && memwb_regWr &&
@@ -2192,10 +2244,10 @@ module CPU(
         .ex_memRd(idex_MemRd),
         .ex_waddr(idex_waddr),
 
-        .mem_valid(exmem_valid),
-        .mem_regWr(exmem_regWr),
-        .mem_memRd(exmem_MemRd),
-        .mem_waddr(exmem_waddr),
+        .exmem_valid(exmem_valid),
+        .exmem_regWr(exmem_regWr),
+        .exmem_memRd(exmem_MemRd),
+        .exmem_regwaddr(exmem_regwaddr),
 
         .wb_valid(memwb_valid),
         .wb_regWr(memwb_regWr),
@@ -2205,13 +2257,14 @@ module CPU(
         .forwardA(forwardA),
         .forwardB(forwardB)
     );
+    reg [31:0] exmem_forward_data;
 
     reg [31:0] ex_data1;
     reg [31:0] ex_data2;
 
     always @(*) begin
         case (forwardA)
-            2'd1:    ex_data1 = exmem_ex_res;
+            2'd1:    ex_data1 = exmem_forward_data;
             2'd2:    ex_data1 = memwb_wdata;
             default: ex_data1 = idex_rdata1;
         endcase
@@ -2219,7 +2272,7 @@ module CPU(
 
     always @(*) begin
         case (forwardB)
-            2'd1:    ex_data2 = exmem_ex_res;
+            2'd1:    ex_data2 = exmem_forward_data;
             2'd2:    ex_data2 = memwb_wdata;
             default: ex_data2 = idex_rdata2;
         endcase
@@ -2296,6 +2349,54 @@ module CPU(
         .ex_exc_ecode(ex_stage_exc_ecode)
     );
 
+    
+
+    always @(*) begin
+        case(exmem_WB_Sel)
+            `WB_ALU: begin
+                exmem_forward_data = exmem_ex_res;
+            end
+
+            `WB_MDU: begin
+                exmem_forward_data = exmem_ex_res;
+            end
+
+            `WB_CPUCFG: begin
+                exmem_forward_data = exmem_ex_res;
+            end
+
+            `WB_PC4: begin
+                exmem_forward_data = exmem_pc4;
+            end
+
+            `WB_CSR: begin
+                exmem_forward_data = exmem_csr_rdata;
+            end
+
+            `WB_TIMER: begin
+                exmem_forward_data = exmem_timer_data;
+            end
+
+            `WB_SC: begin
+                exmem_forward_data = exmem_sc_success ? 32'd1 : 32'd0;
+            end
+
+            `WB_FPR: begin
+                exmem_forward_data = exmem_fp_to_gp_data;
+            end
+
+            // load / ll.w 不能从 EX/MEM 转发，必须等 MEM/WB
+            `WB_MEM: begin
+                exmem_forward_data = 32'b0;
+            end
+
+            default: begin
+                exmem_forward_data = exmem_ex_res;
+            end
+
+        endcase
+    end
+
     assign ex_stall = idex_valid && !ex_ready;
 
 
@@ -2371,7 +2472,7 @@ module CPU(
             exmem_ex_res     <= 32'b0;
             exmem_store_data <= 32'b0;
             exmem_pc4        <= 32'b0;
-            exmem_waddr      <= 5'b0;
+            exmem_regwaddr   <= 5'b0;
             exmem_WB_Sel     <= `WB_ALU;
 
             exmem_exc_valid <= 1'b0;
@@ -2400,7 +2501,7 @@ module CPU(
             exmem_ex_res        <= exmem_ex_res;
             exmem_store_data    <= exmem_store_data;
             exmem_pc4           <= exmem_pc4;
-            exmem_waddr         <= exmem_waddr;
+            exmem_regwaddr         <= exmem_regwaddr;
 
             exmem_regWr         <= exmem_regWr;
             exmem_MemWr         <= exmem_MemWr;
@@ -2431,7 +2532,7 @@ module CPU(
             exmem_store_data <= ex_data2;
             exmem_pc         <= idex_pc;
             exmem_pc4        <= idex_pc4;
-            exmem_waddr      <= idex_waddr;
+            exmem_regwaddr      <= idex_waddr;
 
             exmem_exc_valid <= idex_valid &&
                        ex_res_valid &&
@@ -2707,7 +2808,7 @@ module CPU(
         else begin
             memwb_valid <= mem_can_commit;
             memwb_regWr <= mem_can_commit && exmem_regWr;
-            memwb_waddr <= exmem_waddr;
+            memwb_waddr <= exmem_regwaddr;
             memwb_wdata <= mem_stage_wdata;
         end
     end
