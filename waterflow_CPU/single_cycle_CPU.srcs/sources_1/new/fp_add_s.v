@@ -73,13 +73,11 @@ module fp_add_s(
 
         R = 32'b0;
 
-        // NaN
         if ((exp_a == 8'hff && frac_a != 0) ||
             (exp_b == 8'hff && frac_b != 0)) begin
             R = 32'h7fc0_0000;
         end
 
-        // Inf + Inf
         else if ((exp_a == 8'hff && frac_a == 0) &&
                  (exp_b == 8'hff && frac_b == 0)) begin
             if (sign_a != sign_b)
@@ -88,17 +86,14 @@ module fp_add_s(
                 R = {sign_a, 8'hff, 23'b0};
         end
 
-        // A is Inf
         else if (exp_a == 8'hff && frac_a == 0) begin
             R = {sign_a, 8'hff, 23'b0};
         end
 
-        // B is Inf
         else if (exp_b == 8'hff && frac_b == 0) begin
             R = {sign_b, 8'hff, 23'b0};
         end
 
-        // both zero
         else if (A[30:0] == 31'b0 && B_eff[30:0] == 31'b0) begin
             R = {(sign_a & sign_b), 31'b0};
         end
