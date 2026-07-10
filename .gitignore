@@ -18,3 +18,7 @@
 
 .agents/
 .vscode/
+trace_exp6/
+trace_framework/
+trace_watchdog/
+xsim.dir/

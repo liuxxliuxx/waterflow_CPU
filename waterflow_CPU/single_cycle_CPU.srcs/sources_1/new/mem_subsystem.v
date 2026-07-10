@@ -9,6 +9,7 @@ module mem_subsystem(
     output reg i_resp_valid,
     input wire i_resp_ready,
     output reg [31:0] i_resp_inst,
+    output wire i_resp_err,
     output wire resp_exc_valid,
     input wire d_req_valid,
     output wire d_req_ready,
@@ -20,6 +21,13 @@ module mem_subsystem(
     output reg d_resp_valid,
     input wire d_resp_ready,
     output reg [31:0] d_resp_rdata,
+    output wire d_resp_err,
+    input wire periph_enable,
+    input wire boot_req_valid,
+    output wire boot_req_ready,
+    input wire [31:0] boot_req_addr,
+    input wire [31:0] boot_req_wdata,
+    output wire boot_resp_valid,
     input wire ps2_clk,
     input wire ps2_dat,
     input wire vga_clk,
@@ -64,6 +72,7 @@ module mem_subsystem(
     reg i_resp_exc;
     reg d_resp_exc;
     reg bridge_resp_is_i;
+    reg bridge_resp_is_boot;
     reg bridge_resp_is_write;
 
     wire rst_hi = !rst;
@@ -129,26 +138,38 @@ module mem_subsystem(
     wire d_cache_mem_resp_valid;
     wire [31:0] d_cache_mem_resp_rdata;
 
-    wire d_cache_mem_sel = d_cache_mem_req_valid;
-    wire i_cache_mem_sel = i_cache_mem_req_valid && !d_cache_mem_sel;
-    wire bridge_req_valid = d_cache_mem_sel || i_cache_mem_sel;
+    // The boot loader owns DDR before the CPU is released.  It is deliberately
+    // first in this arbitration so an accidental CPU request cannot delay boot.
+    wire boot_mem_sel = boot_req_valid;
+    wire d_cache_mem_sel = d_cache_mem_req_valid && !boot_mem_sel;
+    wire i_cache_mem_sel = i_cache_mem_req_valid &&
+                           !boot_mem_sel && !d_cache_mem_sel;
+    wire bridge_req_valid = boot_mem_sel || d_cache_mem_sel || i_cache_mem_sel;
     wire bridge_req_ready;
     wire bridge_req_fire = bridge_req_valid && bridge_req_ready;
-    wire bridge_req_we = d_cache_mem_sel ? d_cache_mem_req_we : 1'b0;
-    wire [3:0] bridge_req_wstrb = d_cache_mem_sel ? d_cache_mem_req_wstrb : 4'b0000;
-    wire [31:0] bridge_req_addr = d_cache_mem_sel ? d_cache_mem_req_addr : i_cache_mem_req_addr;
-    wire [31:0] bridge_req_wdata = d_cache_mem_sel ? d_cache_mem_req_wdata : 32'h0;
+    wire bridge_req_we = boot_mem_sel ? 1'b1 :
+                         (d_cache_mem_sel ? d_cache_mem_req_we : 1'b0);
+    wire [3:0] bridge_req_wstrb = boot_mem_sel ? 4'b1111 :
+                                 (d_cache_mem_sel ? d_cache_mem_req_wstrb : 4'b0000);
+    wire [31:0] bridge_req_addr = boot_mem_sel ? boot_req_addr :
+                                  (d_cache_mem_sel ? d_cache_mem_req_addr : i_cache_mem_req_addr);
+    wire [31:0] bridge_req_wdata = boot_mem_sel ? boot_req_wdata :
+                                   (d_cache_mem_sel ? d_cache_mem_req_wdata : 32'h0);
     wire bridge_resp_valid;
     wire [31:0] bridge_resp_rdata;
 
     assign d_cache_mem_req_ready = d_cache_mem_sel && bridge_req_ready;
     assign i_cache_mem_req_ready = i_cache_mem_sel && bridge_req_ready;
-    assign d_cache_mem_resp_valid = bridge_resp_valid && !bridge_resp_is_i && !bridge_resp_is_write;
+    assign boot_req_ready = boot_mem_sel && bridge_req_ready;
+    assign boot_resp_valid = bridge_resp_valid && bridge_resp_is_boot;
+    assign d_cache_mem_resp_valid = bridge_resp_valid && !bridge_resp_is_i &&
+                                    !bridge_resp_is_boot && !bridge_resp_is_write;
     assign i_cache_mem_resp_valid = bridge_resp_valid && bridge_resp_is_i && !bridge_resp_is_write;
     assign d_cache_mem_resp_rdata = bridge_resp_rdata;
     assign i_cache_mem_resp_rdata = bridge_resp_rdata;
 
-    wire mmio_req_valid = d_req_valid && !d_addr_exc && d_is_mmio && d_resp_room;
+    wire mmio_req_valid = d_req_valid && !d_addr_exc && d_is_mmio &&
+                          d_resp_room && periph_enable;
     wire mmio_req_ready, mmio_resp_valid, mmio_resp_err;
     wire mmio_resp_ready = d_resp_room && !d_cache_resp_valid;
     wire [31:0] mmio_resp_rdata;
@@ -162,7 +183,7 @@ module mem_subsystem(
 
     mmio_tdm_bus u_mmio(
         .clk(clk),
-        .rst(rst_hi),
+        .rst(rst_hi || !periph_enable),
         .req_valid(mmio_req_valid),
         .req_ready(mmio_req_ready),
         .req_we(d_req_we),
@@ -269,12 +290,14 @@ module mem_subsystem(
 
     assign resp_exc_valid = (i_resp_valid && i_resp_exc) ||
                             (d_resp_valid && d_resp_exc);
+    assign i_resp_err = i_resp_exc;
+    assign d_resp_err = d_resp_exc;
 
     assign i_req_ready = i_resp_room &&
                          (i_addr_exc ? !i_resp_incoming : i_cache_req_ready);
     assign d_req_ready = d_req_valid && d_resp_room &&
                          (d_addr_exc ? !d_resp_incoming :
-                          (d_is_mmio ? (!d_cache_resp_valid && mmio_req_ready) :
+                          (d_is_mmio ? (periph_enable && !d_cache_resp_valid && mmio_req_ready) :
                                        d_cache_req_ready));
 
     always @(posedge clk or negedge rst) begin
@@ -287,6 +310,7 @@ module mem_subsystem(
             i_resp_exc <= 1'b0;
             d_resp_exc <= 1'b0;
             bridge_resp_is_i <= 1'b0;
+            bridge_resp_is_boot <= 1'b0;
             bridge_resp_is_write <= 1'b0;
         end else begin
             timer <= timer + 32'd1;
@@ -302,6 +326,7 @@ module mem_subsystem(
 
             if (bridge_req_fire) begin
                 bridge_resp_is_i <= i_cache_mem_sel;
+                bridge_resp_is_boot <= boot_mem_sel;
                 bridge_resp_is_write <= bridge_req_we;
             end
 
