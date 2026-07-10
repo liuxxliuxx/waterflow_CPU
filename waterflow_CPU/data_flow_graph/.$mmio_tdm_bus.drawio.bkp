@@ -1,6 +1,6 @@
 <mxfile host="Electron" agent="ChatGPT">
   <diagram id="mmio-tdm-bus" name="mmio_tdm_bus结构图">
-    <mxGraphModel dx="4108" dy="3524" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1850" pageHeight="1120" math="0" shadow="0">
+    <mxGraphModel dx="4784" dy="2837" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1850" pageHeight="1120" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -83,7 +83,7 @@
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="in_req_wdata" parent="1" style="shape=rhombus;perimeter=rhombusPerimeter;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;strokeWidth=2;fontSize=13;fontFamily=Comic Sans MS;align=center;verticalAlign=middle;spacing=0;" value="req_wdata[31:0]" vertex="1">
-          <mxGeometry height="42" width="170" x="15" y="580" as="geometry" />
+          <mxGeometry height="42" width="170" y="580" as="geometry" />
         </mxCell>
         <mxCell id="e_req_wdata" edge="1" parent="1" source="in_req_wdata" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;exitX=1;exitY=0.5;entryX=0;entryY=0.6;entryPerimeter=1;" target="req_ctrl" value="">
           <mxGeometry relative="1" as="geometry" />
