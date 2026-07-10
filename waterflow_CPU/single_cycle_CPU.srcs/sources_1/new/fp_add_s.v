@@ -2,7 +2,9 @@ module fp_add_s(
     input         sub,
     input  [31:0] A,
     input  [31:0] B,
-    output reg [31:0] R
+    output reg [31:0] R,
+    output reg        exc_of,
+    output reg        exc_uf
 );
 
     wire [31:0] B_eff = sub ? {~B[31], B[30:0]} : B;
@@ -71,7 +73,9 @@ module fp_add_s(
         frac_a = A[22:0];
         frac_b = B_eff[22:0];
 
-        R = 32'b0;
+        R      = 32'b0;
+        exc_of = 1'b0;
+        exc_uf = 1'b0;
 
         if ((exp_a == 8'hff && frac_a != 0) ||
             (exp_b == 8'hff && frac_b != 0)) begin
@@ -172,10 +176,12 @@ module fp_add_s(
                 end
 
                 if (exp_res >= 9'd255) begin
-                    R = {sign_res, 8'hff, 23'b0};
+                    R      = {sign_res, 8'hff, 23'b0};
+                    exc_of = 1'b1;
                 end
                 else if (exp_res == 9'd1 && rounded[23] == 1'b0) begin
-                    R = {sign_res, 8'b0, rounded[22:0]};
+                    R      = {sign_res, 8'b0, rounded[22:0]};
+                    exc_uf = 1'b1;
                 end
                 else begin
                     R = {sign_res, exp_res[7:0], rounded[22:0]};

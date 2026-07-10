@@ -7,7 +7,9 @@ module fp_mul_s(
 
     output        busy,
     output        ready,
-    output [31:0] R
+    output [31:0] R,
+    output        exc_of,
+    output        exc_uf
 );
 
     wire        sign_res_w = A[31] ^ B[31];
@@ -87,17 +89,23 @@ module fp_mul_s(
     reg signed [10:0] exp_res_r;
 
     wire [31:0] normal_result;
+    wire        finish_exc_of;
+    wire        finish_exc_uf;
 
     fp_mul_s_finish u_finish(
         .sign_res (sign_res_r),
         .exp_base (exp_res_r),
         .product  (mant_product_full[47:0]),
-        .R        (normal_result)
+        .R        (normal_result),
+        .exc_of   (finish_exc_of),
+        .exc_uf   (finish_exc_uf)
     );
 
-    assign busy  = mul_busy;
-    assign ready = special_ready_r || mul_ready;
-    assign R     = special_ready_r ? special_result_r : normal_result;
+    assign busy   = mul_busy;
+    assign ready  = special_ready_r || mul_ready;
+    assign R      = special_ready_r ? special_result_r : normal_result;
+    assign exc_of = special_ready_r ? 1'b0 : finish_exc_of;
+    assign exc_uf = special_ready_r ? 1'b0 : finish_exc_uf;
 
     always @(posedge clk or negedge rst) begin
         if (!rst) begin
@@ -132,7 +140,9 @@ module fp_mul_s_finish(
     input               sign_res,
     input signed [10:0] exp_base,
     input        [47:0] product,
-    output reg   [31:0] R
+    output reg   [31:0] R,
+    output reg          exc_of,
+    output reg          exc_uf
 );
 
     reg [47:0] product_norm;
@@ -211,6 +221,8 @@ module fp_mul_s_finish(
         round_inc    = 1'b0;
         shift_num    = 6'd0;
         R            = 32'b0;
+        exc_of       = 1'b0;
+        exc_uf       = 1'b0;
 
         if (product == 48'b0) begin
             R = {sign_res, 31'b0};
@@ -240,7 +252,8 @@ module fp_mul_s_finish(
             end
 
             if (exp_res <= 0) begin
-                R = {sign_res, 31'b0};
+                R      = {sign_res, 31'b0};
+                exc_uf = 1'b1;
             end
             else begin
                 round_inc =
@@ -255,7 +268,8 @@ module fp_mul_s_finish(
                 end
 
                 if (exp_res >= 11'sd255) begin
-                    R = {sign_res, 8'hff, 23'b0};
+                    R      = {sign_res, 8'hff, 23'b0};
+                    exc_of = 1'b1;
                 end
                 else begin
                     R = {
