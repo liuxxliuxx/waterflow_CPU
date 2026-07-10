@@ -1,6 +1,6 @@
 `timescale 1ns / 1ps
 
-module dcache_blocking_lite(
+module dcache_blocking(
 	input wire clk,
 	input wire rst,
 	input wire req_valid,
