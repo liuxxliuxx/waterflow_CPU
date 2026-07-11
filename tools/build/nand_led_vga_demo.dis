@@ -1,0 +1,230 @@
+
+/mnt/c/Users/liuxx/Desktop/small_term/waterflow_CPU/tools/build/nand_led_vga_demo.elf:     file format elf32-loongarch
+
+
+Disassembly of section .text:
+
+1c000000 <_start>:
+1c000000:	1439ffe3 	lu12i.w	$r3,118783(0x1cfff)
+1c000004:	1c00000c 	pcaddu12i	$r12,0
+1c000008:	028ba18c 	addi.w	$r12,$r12,744(0x2e8)
+1c00000c:	1c00000d 	pcaddu12i	$r13,0
+1c000010:	028b81ad 	addi.w	$r13,$r13,736(0x2e0)
+1c000014:	5800118d 	beq	$r12,$r13,16(0x10) # 1c000024 <_start+0x24>
+1c000018:	29800180 	st.w	$r0,$r12,0
+1c00001c:	0280118c 	addi.w	$r12,$r12,4(0x4)
+1c000020:	53fff7ff 	b	-12(0xffffff4) # 1c000014 <_start+0x14>
+1c000024:	54029000 	bl	656(0x290) # 1c0002b4 <main>
+1c000028:	50000000 	b	0 # 1c000028 <_start+0x28>
+
+1c00002c <vga_clear>:
+1c00002c:	143fc26c 	lu12i.w	$r12,130579(0x1fe13)
+1c000030:	03bff18c 	ori	$r12,$r12,0xffc
+1c000034:	0280040d 	addi.w	$r13,$r0,1(0x1)
+1c000038:	2980018d 	st.w	$r13,$r12,0
+1c00003c:	2880018d 	ld.w	$r13,$r12,0
+1c000040:	034005ad 	andi	$r13,$r13,0x1
+1c000044:	5ffff9a0 	bne	$r13,$r0,-8(0x3fff8) # 1c00003c <vga_clear+0x10>
+1c000048:	4c000020 	jirl	$r0,$r1,0
+
+1c00004c <vga_draw_frame>:
+1c00004c:	143fc26c 	lu12i.w	$r12,130579(0x1fe13)
+1c000050:	03bfe18d 	ori	$r13,$r12,0xff8
+1c000054:	0280040e 	addi.w	$r14,$r0,1(0x1)
+1c000058:	298001ae 	st.w	$r14,$r13,0
+1c00005c:	03bff18c 	ori	$r12,$r12,0xffc
+1c000060:	2880018d 	ld.w	$r13,$r12,0
+1c000064:	034005ad 	andi	$r13,$r13,0x1
+1c000068:	5ffff9a0 	bne	$r13,$r0,-8(0x3fff8) # 1c000060 <vga_draw_frame+0x14>
+1c00006c:	4c000020 	jirl	$r0,$r1,0
+
+1c000070 <vga_putc_xy>:
+1c000070:	02bfc063 	addi.w	$r3,$r3,-16(0xff0)
+1c000074:	29803066 	st.w	$r6,$r3,12(0xc)
+1c000078:	02813c0c 	addi.w	$r12,$r0,79(0x4f)
+1c00007c:	68003184 	bltu	$r12,$r4,48(0x30) # 1c0000ac <vga_putc_xy+0x3c>
+1c000080:	0280740c 	addi.w	$r12,$r0,29(0x1d)
+1c000084:	68002985 	bltu	$r12,$r5,40(0x28) # 1c0000ac <vga_putc_xy+0x3c>
+1c000088:	004088ac 	slli.w	$r12,$r5,0x2
+1c00008c:	0010158c 	add.w	$r12,$r12,$r5
+1c000090:	0040918c 	slli.w	$r12,$r12,0x4
+1c000094:	0010118c 	add.w	$r12,$r12,$r4
+1c000098:	2a00306d 	ld.bu	$r13,$r3,12(0xc)
+1c00009c:	0040898c 	slli.w	$r12,$r12,0x2
+1c0000a0:	143fc204 	lu12i.w	$r4,130576(0x1fe10)
+1c0000a4:	0010118c 	add.w	$r12,$r12,$r4
+1c0000a8:	2980018d 	st.w	$r13,$r12,0
+1c0000ac:	02804063 	addi.w	$r3,$r3,16(0x10)
+1c0000b0:	4c000020 	jirl	$r0,$r1,0
+
+1c0000b4 <vga_puts_xy>:
+1c0000b4:	0011108c 	sub.w	$r12,$r4,$r4
+1c0000b8:	001030cc 	add.w	$r12,$r6,$r12
+1c0000bc:	001500d2 	move	$r18,$r6
+1c0000c0:	28000186 	ld.b	$r6,$r12,0
+1c0000c4:	0015008f 	move	$r15,$r4
+1c0000c8:	001500b1 	move	$r17,$r5
+1c0000cc:	0015008e 	move	$r14,$r4
+1c0000d0:	02813c10 	addi.w	$r16,$r0,79(0x4f)
+1c0000d4:	58000cc0 	beq	$r6,$r0,12(0xc) # 1c0000e0 <vga_puts_xy+0x2c>
+1c0000d8:	6c000e04 	bgeu	$r16,$r4,12(0xc) # 1c0000e4 <vga_puts_xy+0x30>
+1c0000dc:	4c000020 	jirl	$r0,$r1,0
+1c0000e0:	4c000020 	jirl	$r0,$r1,0
+1c0000e4:	02bfc063 	addi.w	$r3,$r3,-16(0xff0)
+1c0000e8:	29803061 	st.w	$r1,$r3,12(0xc)
+1c0000ec:	001501c4 	move	$r4,$r14
+1c0000f0:	00150225 	move	$r5,$r17
+1c0000f4:	57ff7fff 	bl	-132(0xfffff7c) # 1c000070 <vga_putc_xy>
+1c0000f8:	028005ce 	addi.w	$r14,$r14,1(0x1)
+1c0000fc:	00113dcc 	sub.w	$r12,$r14,$r15
+1c000100:	0010324c 	add.w	$r12,$r18,$r12
+1c000104:	28000186 	ld.b	$r6,$r12,0
+1c000108:	580008c0 	beq	$r6,$r0,8(0x8) # 1c000110 <vga_puts_xy+0x5c>
+1c00010c:	6fffe20e 	bgeu	$r16,$r14,-32(0x3ffe0) # 1c0000ec <vga_puts_xy+0x38>
+1c000110:	28803061 	ld.w	$r1,$r3,12(0xc)
+1c000114:	02804063 	addi.w	$r3,$r3,16(0x10)
+1c000118:	4c000020 	jirl	$r0,$r1,0
+
+1c00011c <vga_getc_xy>:
+1c00011c:	02813c0c 	addi.w	$r12,$r0,79(0x4f)
+1c000120:	68004984 	bltu	$r12,$r4,72(0x48) # 1c000168 <vga_getc_xy+0x4c>
+1c000124:	0280740c 	addi.w	$r12,$r0,29(0x1d)
+1c000128:	0015000d 	move	$r13,$r0
+1c00012c:	68004185 	bltu	$r12,$r5,64(0x40) # 1c00016c <vga_getc_xy+0x50>
+1c000130:	004088ac 	slli.w	$r12,$r5,0x2
+1c000134:	0010158c 	add.w	$r12,$r12,$r5
+1c000138:	0040918c 	slli.w	$r12,$r12,0x4
+1c00013c:	0010118c 	add.w	$r12,$r12,$r4
+1c000140:	0040898c 	slli.w	$r12,$r12,0x2
+1c000144:	143fc204 	lu12i.w	$r4,130576(0x1fe10)
+1c000148:	0010118c 	add.w	$r12,$r12,$r4
+1c00014c:	2880018d 	ld.w	$r13,$r12,0
+1c000150:	02bfc063 	addi.w	$r3,$r3,-16(0xff0)
+1c000154:	2980306d 	st.w	$r13,$r3,12(0xc)
+1c000158:	2800306d 	ld.b	$r13,$r3,12(0xc)
+1c00015c:	02804063 	addi.w	$r3,$r3,16(0x10)
+1c000160:	001501a4 	move	$r4,$r13
+1c000164:	4c000020 	jirl	$r0,$r1,0
+1c000168:	0015000d 	move	$r13,$r0
+1c00016c:	001501a4 	move	$r4,$r13
+1c000170:	4c000020 	jirl	$r0,$r1,0
+
+1c000174 <ps2_status>:
+1c000174:	143fc00c 	lu12i.w	$r12,130560(0x1fe00)
+1c000178:	28800184 	ld.w	$r4,$r12,0
+1c00017c:	4c000020 	jirl	$r0,$r1,0
+
+1c000180 <ps2_getchar_nonblock>:
+1c000180:	143fc00c 	lu12i.w	$r12,130560(0x1fe00)
+1c000184:	2880018d 	ld.w	$r13,$r12,0
+1c000188:	02bffc04 	addi.w	$r4,$r0,-1(0xfff)
+1c00018c:	034005ad 	andi	$r13,$r13,0x1
+1c000190:	5c0011a0 	bne	$r13,$r0,16(0x10) # 1c0001a0 <ps2_getchar_nonblock+0x20>
+1c000194:	0380118c 	ori	$r12,$r12,0x4
+1c000198:	28800184 	ld.w	$r4,$r12,0
+1c00019c:	0343fc84 	andi	$r4,$r4,0xff
+1c0001a0:	4c000020 	jirl	$r0,$r1,0
+
+1c0001a4 <ps2_getchar>:
+1c0001a4:	02bf8063 	addi.w	$r3,$r3,-32(0xfe0)
+1c0001a8:	29807061 	st.w	$r1,$r3,28(0x1c)
+1c0001ac:	57ffd7ff 	bl	-44(0xfffffd4) # 1c000180 <ps2_getchar_nonblock>
+1c0001b0:	63fffc80 	blt	$r4,$r0,-4(0x3fffc) # 1c0001ac <ps2_getchar+0x8>
+1c0001b4:	28807061 	ld.w	$r1,$r3,28(0x1c)
+1c0001b8:	29803064 	st.w	$r4,$r3,12(0xc)
+1c0001bc:	28003064 	ld.b	$r4,$r3,12(0xc)
+1c0001c0:	02808063 	addi.w	$r3,$r3,32(0x20)
+1c0001c4:	4c000020 	jirl	$r0,$r1,0
+
+1c0001c8 <uart_putc>:
+1c0001c8:	02bfc063 	addi.w	$r3,$r3,-16(0xff0)
+1c0001cc:	29803064 	st.w	$r4,$r3,12(0xc)
+1c0001d0:	143fc60d 	lu12i.w	$r13,130608(0x1fe30)
+1c0001d4:	288001ac 	ld.w	$r12,$r13,0
+1c0001d8:	0340058c 	andi	$r12,$r12,0x1
+1c0001dc:	5ffff980 	bne	$r12,$r0,-8(0x3fff8) # 1c0001d4 <uart_putc+0xc>
+1c0001e0:	2a00306c 	ld.bu	$r12,$r3,12(0xc)
+1c0001e4:	298001ac 	st.w	$r12,$r13,0
+1c0001e8:	02804063 	addi.w	$r3,$r3,16(0x10)
+1c0001ec:	4c000020 	jirl	$r0,$r1,0
+
+1c0001f0 <uart_puts>:
+1c0001f0:	2800008c 	ld.b	$r12,$r4,0
+1c0001f4:	0015008e 	move	$r14,$r4
+1c0001f8:	0280280f 	addi.w	$r15,$r0,10(0xa)
+1c0001fc:	5c000980 	bne	$r12,$r0,8(0x8) # 1c000204 <uart_puts+0x14>
+1c000200:	4c000020 	jirl	$r0,$r1,0
+1c000204:	02bfc063 	addi.w	$r3,$r3,-16(0xff0)
+1c000208:	29803061 	st.w	$r1,$r3,12(0xc)
+1c00020c:	5c000d8f 	bne	$r12,$r15,12(0xc) # 1c000218 <uart_puts+0x28>
+1c000210:	02803404 	addi.w	$r4,$r0,13(0xd)
+1c000214:	57ffb7ff 	bl	-76(0xfffffb4) # 1c0001c8 <uart_putc>
+1c000218:	280001c4 	ld.b	$r4,$r14,0
+1c00021c:	57ffafff 	bl	-84(0xfffffac) # 1c0001c8 <uart_putc>
+1c000220:	028005ce 	addi.w	$r14,$r14,1(0x1)
+1c000224:	280001cc 	ld.b	$r12,$r14,0
+1c000228:	5fffe580 	bne	$r12,$r0,-28(0x3ffe4) # 1c00020c <uart_puts+0x1c>
+1c00022c:	28803061 	ld.w	$r1,$r3,12(0xc)
+1c000230:	02804063 	addi.w	$r3,$r3,16(0x10)
+1c000234:	4c000020 	jirl	$r0,$r1,0
+
+1c000238 <timer_read>:
+1c000238:	143fc40c 	lu12i.w	$r12,130592(0x1fe20)
+1c00023c:	28800184 	ld.w	$r4,$r12,0
+1c000240:	4c000020 	jirl	$r0,$r1,0
+
+1c000244 <delay_cycles>:
+1c000244:	143fc40c 	lu12i.w	$r12,130592(0x1fe20)
+1c000248:	2880018d 	ld.w	$r13,$r12,0
+1c00024c:	143fc40e 	lu12i.w	$r14,130592(0x1fe20)
+1c000250:	288001cc 	ld.w	$r12,$r14,0
+1c000254:	0011358c 	sub.w	$r12,$r12,$r13
+1c000258:	6bfff984 	bltu	$r12,$r4,-8(0x3fff8) # 1c000250 <delay_cycles+0xc>
+1c00025c:	4c000020 	jirl	$r0,$r1,0
+
+1c000260 <delay_ms>:
+1c000260:	14000310 	lu12i.w	$r16,24(0x18)
+1c000264:	0015008f 	move	$r15,$r4
+1c000268:	039a8210 	ori	$r16,$r16,0x6a0
+1c00026c:	5c000880 	bne	$r4,$r0,8(0x8) # 1c000274 <delay_ms+0x14>
+1c000270:	4c000020 	jirl	$r0,$r1,0
+1c000274:	02bfc063 	addi.w	$r3,$r3,-16(0xff0)
+1c000278:	29803061 	st.w	$r1,$r3,12(0xc)
+1c00027c:	00150204 	move	$r4,$r16
+1c000280:	57ffc7ff 	bl	-60(0xfffffc4) # 1c000244 <delay_cycles>
+1c000284:	02bffdef 	addi.w	$r15,$r15,-1(0xfff)
+1c000288:	5ffff5e0 	bne	$r15,$r0,-12(0x3fff4) # 1c00027c <delay_ms+0x1c>
+1c00028c:	28803061 	ld.w	$r1,$r3,12(0xc)
+1c000290:	02804063 	addi.w	$r3,$r3,16(0x10)
+1c000294:	4c000020 	jirl	$r0,$r1,0
+
+1c000298 <led_write>:
+1c000298:	143fcc0c 	lu12i.w	$r12,130656(0x1fe60)
+1c00029c:	29800184 	st.w	$r4,$r12,0
+1c0002a0:	4c000020 	jirl	$r0,$r1,0
+
+1c0002a4 <diag_write>:
+1c0002a4:	143fcc0c 	lu12i.w	$r12,130656(0x1fe60)
+1c0002a8:	0380118c 	ori	$r12,$r12,0x4
+1c0002ac:	29800184 	st.w	$r4,$r12,0
+1c0002b0:	4c000020 	jirl	$r0,$r1,0
+
+1c0002b4 <main>:
+1c0002b4:	02bfc063 	addi.w	$r3,$r3,-16(0xff0)
+1c0002b8:	02832804 	addi.w	$r4,$r0,202(0xca)
+1c0002bc:	29803061 	st.w	$r1,$r3,12(0xc)
+1c0002c0:	57ffdbff 	bl	-40(0xfffffd8) # 1c000298 <led_write>
+1c0002c4:	57fd6bff 	bl	-664(0xffffd68) # 1c00002c <vga_clear>
+1c0002c8:	1c000006 	pcaddu12i	$r6,0
+1c0002cc:	028060c6 	addi.w	$r6,$r6,24(0x18)
+1c0002d0:	00150005 	move	$r5,$r0
+1c0002d4:	00150004 	move	$r4,$r0
+1c0002d8:	57fddfff 	bl	-548(0xffffddc) # 1c0000b4 <vga_puts_xy>
+1c0002dc:	50000000 	b	0 # 1c0002dc <main+0x28>
+
+Disassembly of section .rodata:
+
+1c0002e0 <__bss_end-0xc>:
+1c0002e0:	6c6c6568 	bgeu	$r11,$r8,27748(0x6c64) # 1c006f44 <__bss_end+0x6c58>
+1c0002e4:	726f776f 	0x726f776f
+1c0002e8:	0000646c 	rdtimeh.w	$r12,$r3

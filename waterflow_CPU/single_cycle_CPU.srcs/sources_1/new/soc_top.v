@@ -38,8 +38,10 @@ module soc_top #(
     wire ddr_ui_clk;
     wire ddr_ui_rst;
     wire ddr_init_calib_complete;
-    wire vga_clk;
+    wire soc_clk_25;
     wire cpu_rst_n;
+    reg [1:0] ddr_ready_sync;
+    wire ddr_ready_25 = ddr_ready_sync[1];
 
     wire inst_req_valid;
     wire inst_req_ready;
@@ -96,14 +98,25 @@ module soc_top #(
     // The board pulls NAND WP# high externally; this SoC only performs reads.
     assign nand_wp_unused = nand_boot_owner ? nand_boot_wp_n : nand_mmio_wp_n;
 
-    assign cpu_rst_n = rst_n && !ddr_ui_rst && ddr_init_calib_complete && boot_done;
+    // Synchronize MIG readiness into the 25 MHz SoC domain before using it
+    // for reset release or the boot loader's first DDR request.
+    always @(posedge soc_clk_25 or negedge rst_n) begin
+        if (!rst_n) begin
+            ddr_ready_sync <= 2'b00;
+        end else begin
+            ddr_ready_sync <= {ddr_ready_sync[0],
+                               ddr_init_calib_complete && !ddr_ui_rst};
+        end
+    end
 
-    // A simple divide-by-four pixel clock keeps the text VGA peripheral usable
-    // while the CPU and cache remain in the MIG UI clock domain.
+    assign cpu_rst_n = rst_n && ddr_ready_25 && boot_done;
+
+    // sys_clk_i is the 100 MHz board clock. CPU, caches, MMIO, NAND boot, and
+    // VGA run at this divide-by-four 25 MHz clock; only MIG remains at UI clk.
     soc_vga_clk_div u_vga_clk_div (
         .clk(sys_clk_i),
         .rst_n(rst_n),
-        .clk_out(vga_clk)
+        .clk_out(soc_clk_25)
     );
 
     nand_boot_loader #(
@@ -111,9 +124,9 @@ module soc_top #(
         .BOOT_WORDS(BOOT_WORDS),
         .BOOT_LOAD_ADDR(BOOT_LOAD_ADDR)
     ) u_boot_loader (
-        .clk(ddr_ui_clk),
+        .clk(soc_clk_25),
         .rst_n(rst_n),
-        .ddr_ready(ddr_init_calib_complete && !ddr_ui_rst),
+        .ddr_ready(ddr_ready_25),
         .ddr_req_valid(boot_ddr_req_valid),
         .ddr_req_ready(boot_ddr_req_ready),
         .ddr_req_addr(boot_ddr_req_addr),
@@ -134,7 +147,7 @@ module soc_top #(
     );
 
     CPU u_cpu (
-        .clk(ddr_ui_clk),
+        .clk(soc_clk_25),
         .rst(cpu_rst_n),
         .test_addr(5'd0),
         .test_data(),
@@ -160,7 +173,7 @@ module soc_top #(
     );
 
     mem_subsystem u_mem_subsystem (
-        .clk(ddr_ui_clk),
+        .clk(soc_clk_25),
         .rst(rst_n),
         .i_req_valid(inst_req_valid && cpu_rst_n),
         .i_req_ready(inst_req_ready),
@@ -189,7 +202,7 @@ module soc_top #(
         .boot_resp_valid(boot_ddr_resp_valid),
         .ps2_clk(1'b1),
         .ps2_dat(1'b1),
-        .vga_clk(vga_clk),
+        .vga_clk(soc_clk_25),
         .vga_r(unused_vga_r),
         .vga_g(unused_vga_g),
         .vga_b(unused_vga_b),
@@ -228,9 +241,15 @@ module soc_top #(
         .ddr3_odt(ddr3_odt)
     );
 
-    assign led = boot_error ? 8'hff :
+    // Board LEDs are active low. Before software takes ownership, expose
+    // mutually exclusive boot stages so a solid all-on pattern means that
+    // boot completed but software has not yet written the LED register.
+    //   8'hfe: LED0 on, waiting for DDR calibration
+    //   8'hfd: LED1 on, NAND image loading
+    //   8'hfb: LED2 on, boot failure
+    assign led = boot_error ? 8'hfb :
                  (boot_done ? mmio_led_value :
-                              {6'b0, ddr_init_calib_complete, 1'b0});
+                              (ddr_ready_25 ? 8'hfd : 8'hfe));
 endmodule
 
 module soc_vga_clk_div (

@@ -10,7 +10,7 @@ set sim_dir [file join $project_dir single_cycle_CPU.srcs sim_1 new]
 
 open_project $project_path
 
-foreach file_name {nand_boot_loader.v soc_top.v} {
+foreach file_name {ddr_cdc_bridge.v nand_boot_loader.v soc_top.v} {
     set file_path [file join $rtl_dir $file_name]
     if {[llength [get_files -quiet $file_path]] == 0} {
         add_files -norecurse $file_path
@@ -26,6 +26,7 @@ foreach file_name {
     nand_boot_loader_tb.v
     nand_boot_loader_timeout_tb.v
     nand_boot_loader_ddr_timeout_tb.v
+    ddr_cdc_bridge_tb.v
 } {
     set file_path [file join $sim_dir $file_name]
     if {[llength [get_files -quiet $file_path]] == 0} {

@@ -157,6 +157,14 @@ module mem_subsystem(
                                    (d_cache_mem_sel ? d_cache_mem_req_wdata : 32'h0);
     wire bridge_resp_valid;
     wire [31:0] bridge_resp_rdata;
+    wire ddr_req_valid;
+    wire ddr_req_ready;
+    wire ddr_req_we;
+    wire [3:0] ddr_req_wstrb;
+    wire [31:0] ddr_req_addr;
+    wire [31:0] ddr_req_wdata;
+    wire ddr_resp_valid;
+    wire [31:0] ddr_resp_rdata;
 
     assign d_cache_mem_req_ready = d_cache_mem_sel && bridge_req_ready;
     assign i_cache_mem_req_ready = i_cache_mem_sel && bridge_req_ready;
@@ -257,6 +265,32 @@ module mem_subsystem(
         .mem_resp_rdata(d_cache_mem_resp_rdata)
     );
 
+    // CPU/cache/MMIO run in clk's 25 MHz domain. The MIG application port
+    // remains in ddr_ui_clk's domain, so requests and responses cross here.
+    ddr_cdc_bridge u_ddr_cdc_bridge(
+        .src_clk(clk),
+        .src_rst_n(rst),
+        .src_req_valid(bridge_req_valid),
+        .src_req_ready(bridge_req_ready),
+        .src_req_we(bridge_req_we),
+        .src_req_wstrb(bridge_req_wstrb),
+        .src_req_addr(bridge_req_addr),
+        .src_req_wdata(bridge_req_wdata),
+        .src_resp_valid(bridge_resp_valid),
+        .src_resp_ready(1'b1),
+        .src_resp_rdata(bridge_resp_rdata),
+        .dst_clk(ddr_ui_clk),
+        .dst_rst(ddr_ui_rst),
+        .dst_req_valid(ddr_req_valid),
+        .dst_req_ready(ddr_req_ready),
+        .dst_req_we(ddr_req_we),
+        .dst_req_wstrb(ddr_req_wstrb),
+        .dst_req_addr(ddr_req_addr),
+        .dst_req_wdata(ddr_req_wdata),
+        .dst_resp_valid(ddr_resp_valid),
+        .dst_resp_rdata(ddr_resp_rdata)
+    );
+
     ddr3_mig_bridge u_ddr3_bridge(
         .sys_clk_i(ddr_sys_clk_i),
         .sys_rst(rst_hi),
@@ -277,15 +311,15 @@ module mem_subsystem(
         .ddr3_dqs_p(ddr3_dqs_p),
         .ddr3_dm(ddr3_dm),
         .ddr3_odt(ddr3_odt),
-        .cpu_req_valid(bridge_req_valid),
-        .cpu_req_ready(bridge_req_ready),
-        .cpu_req_we(bridge_req_we),
-        .cpu_req_wstrb(bridge_req_wstrb),
-        .cpu_req_addr(bridge_req_addr),
-        .cpu_req_wdata(bridge_req_wdata),
-        .cpu_resp_valid(bridge_resp_valid),
+        .cpu_req_valid(ddr_req_valid),
+        .cpu_req_ready(ddr_req_ready),
+        .cpu_req_we(ddr_req_we),
+        .cpu_req_wstrb(ddr_req_wstrb),
+        .cpu_req_addr(ddr_req_addr),
+        .cpu_req_wdata(ddr_req_wdata),
+        .cpu_resp_valid(ddr_resp_valid),
         .cpu_resp_ready(1'b1),
-        .cpu_resp_rdata(bridge_resp_rdata)
+        .cpu_resp_rdata(ddr_resp_rdata)
     );
 
     assign resp_exc_valid = (i_resp_valid && i_resp_exc) ||

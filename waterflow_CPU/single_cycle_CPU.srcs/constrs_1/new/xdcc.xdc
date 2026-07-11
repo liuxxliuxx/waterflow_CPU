@@ -4,6 +4,24 @@
 set_property PACKAGE_PIN AC19 [get_ports {sys_clk_i}]
 set_property IOSTANDARD LVCMOS33 [get_ports {sys_clk_i}]
 
+# soc_vga_clk_div divides the 100 MHz board clock by four.  This is the
+# 25 MHz clock domain for CPU, caches, MMIO, NAND boot, and VGA.
+create_generated_clock -name soc_clk_25 -source [get_ports {sys_clk_i}] \
+    -divide_by 4 [get_pins {u_vga_clk_div/u_pix_clk_bufg/O}]
+
+# The DDR UI clock is generated inside MIG.  ddr_cdc_bridge explicitly
+# synchronizes the two domains, so timing must not analyze them as related.
+set ddr_ui_clks [get_clocks -quiet -of_objects [get_nets -quiet {ddr_ui_clk}]]
+if {[llength $ddr_ui_clks] == 0} {
+    set ddr_ui_clks [get_clocks -quiet -of_objects \
+        [get_pins -quiet {u_mem_subsystem/u_ddr3_bridge/ui_clk}]]
+}
+if {[llength $ddr_ui_clks] != 0} {
+    set_clock_groups -asynchronous \
+        -group [get_clocks {soc_clk_25}] \
+        -group $ddr_ui_clks
+}
+
 set_property PACKAGE_PIN Y3 [get_ports {rst_n}]
 set_property IOSTANDARD LVCMOS33 [get_ports {rst_n}]
 

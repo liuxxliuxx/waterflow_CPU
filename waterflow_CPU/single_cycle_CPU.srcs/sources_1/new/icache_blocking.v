@@ -19,6 +19,7 @@ module icache_blocking(
 	reg valid[0:255];
 	reg [1:0] state;
 	reg [31:0] saved_addr;
+	reg mem_req_sent;
 	wire [7:0] index = req_addr[9:2];
 	wire [21:0] req_tag = req_addr[31:10];
 	wire hit = valid[index] && tag[index] == req_tag;
@@ -32,6 +33,7 @@ module icache_blocking(
 			state <= S_IDLE;
 			resp_valid <= 1'b0;
 			mem_req_valid <= 1'b0;
+			mem_req_sent <= 1'b0;
 			resp_inst <= 32'h0340_0000;
 			for (i = 0; i < 256; i = i + 1) begin
 				valid[i] <= 1'b0;
@@ -43,6 +45,7 @@ module icache_blocking(
 			case (state)
 				S_IDLE: begin
 					mem_req_valid <= 1'b0;
+					mem_req_sent <= 1'b0;
 					if (req_valid && req_ready) begin
 						saved_addr <= req_addr;
 						if (hit) begin
@@ -52,19 +55,34 @@ module icache_blocking(
 						end else begin
 							mem_req_valid <= 1'b1;
 							mem_req_addr <= req_addr;
+							mem_req_sent <= 1'b0;
 							state <= S_WAIT_MEM;
 						end
 					end
 				end
 				S_WAIT_MEM: begin
 					mem_req_addr <= saved_addr;
-					mem_req_valid <= mem_req_ready ? 1'b0 : 1'b1;
+					// A blocking miss issues exactly one request.  The old logic
+					// reasserted valid whenever the downstream bridge was busy;
+					// after a response that bridge became ready again and accepted a
+					// duplicate read.  The duplicate response shifted every later
+					// instruction by one word.
+					if (!mem_req_sent) begin
+						mem_req_valid <= 1'b1;
+						if (mem_req_ready) begin
+							mem_req_valid <= 1'b0;
+							mem_req_sent <= 1'b1;
+						end
+					end else begin
+						mem_req_valid <= 1'b0;
+					end
 					if (mem_resp_valid) begin
 						data[saved_addr[9:2]] <= mem_resp_rdata;
 						tag[saved_addr[9:2]] <= saved_addr[31:10];
 						valid[saved_addr[9:2]] <= 1'b1;
 						resp_inst <= mem_resp_rdata;
 						resp_valid <= 1'b1;
+						mem_req_valid <= 1'b0;
 						state <= S_RESP;
 					end
 				end
