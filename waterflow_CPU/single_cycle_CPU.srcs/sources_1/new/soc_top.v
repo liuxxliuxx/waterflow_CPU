@@ -3,7 +3,8 @@
 module soc_top #(
     parameter [24:0] BOOT_NAND_START_WORD = 25'd0,
     parameter [31:0] BOOT_WORDS = 32'd1024,
-    parameter [31:0] BOOT_LOAD_ADDR = 32'h1c00_0000
+    parameter [31:0] BOOT_LOAD_ADDR = 32'h1c00_0000,
+    parameter BOOT_VERIFY_IMAGE = 1'b1
 ) (
     input  wire        sys_clk_i,
     input  wire        rst_n,
@@ -11,6 +12,8 @@ module soc_top #(
     output wire        uart_tx,
     input  wire        uart_rx,
     output wire [7:0]  led,
+    output wire [1:0]  led_dual_r,
+    output wire [1:0]  led_dual_g,
 
     inout  wire [7:0]  nand_d,
     output wire        nand_cle,
@@ -63,9 +66,14 @@ module soc_top #(
 
     wire boot_ddr_req_valid;
     wire boot_ddr_req_ready;
+    wire boot_ddr_req_we;
+    wire [3:0] boot_ddr_req_wstrb;
     wire [31:0] boot_ddr_req_addr;
     wire [31:0] boot_ddr_req_wdata;
     wire boot_ddr_resp_valid;
+    wire [31:0] boot_ddr_resp_rdata;
+    wire nand_test_pass;
+    wire ddr_test_pass;
     wire boot_done;
     wire boot_error;
 
@@ -122,16 +130,20 @@ module soc_top #(
     nand_boot_loader #(
         .BOOT_NAND_START_WORD(BOOT_NAND_START_WORD),
         .BOOT_WORDS(BOOT_WORDS),
-        .BOOT_LOAD_ADDR(BOOT_LOAD_ADDR)
+        .BOOT_LOAD_ADDR(BOOT_LOAD_ADDR),
+        .VERIFY_EXPECTED_IMAGE(BOOT_VERIFY_IMAGE)
     ) u_boot_loader (
         .clk(soc_clk_25),
         .rst_n(rst_n),
         .ddr_ready(ddr_ready_25),
         .ddr_req_valid(boot_ddr_req_valid),
         .ddr_req_ready(boot_ddr_req_ready),
+        .ddr_req_we(boot_ddr_req_we),
+        .ddr_req_wstrb(boot_ddr_req_wstrb),
         .ddr_req_addr(boot_ddr_req_addr),
         .ddr_req_wdata(boot_ddr_req_wdata),
         .ddr_resp_valid(boot_ddr_resp_valid),
+        .ddr_resp_rdata(boot_ddr_resp_rdata),
         .nand_d_i(nand_d),
         .nand_d_o(nand_boot_d_o),
         .nand_d_oe(nand_boot_d_oe),
@@ -142,6 +154,8 @@ module soc_top #(
         .nand_we_n(nand_boot_we_n),
         .nand_wp_n(nand_boot_wp_n),
         .nand_rdy(nand_rdy),
+        .nand_test_pass(nand_test_pass),
+        .ddr_test_pass(ddr_test_pass),
         .boot_done(boot_done),
         .boot_error(boot_error)
     );
@@ -197,9 +211,12 @@ module soc_top #(
         .periph_enable(boot_done),
         .boot_req_valid(boot_ddr_req_valid),
         .boot_req_ready(boot_ddr_req_ready),
+        .boot_req_we(boot_ddr_req_we),
+        .boot_req_wstrb(boot_ddr_req_wstrb),
         .boot_req_addr(boot_ddr_req_addr),
         .boot_req_wdata(boot_ddr_req_wdata),
         .boot_resp_valid(boot_ddr_resp_valid),
+        .boot_resp_rdata(boot_ddr_resp_rdata),
         .ps2_clk(1'b1),
         .ps2_dat(1'b1),
         .vga_clk(soc_clk_25),
@@ -250,6 +267,15 @@ module soc_top #(
     assign led = boot_error ? 8'hfb :
                  (boot_done ? mmio_led_value :
                               (ddr_ready_25 ? 8'hfd : 8'hfe));
+
+    // The two dual-color LEDs are common-cathode and active high.  The board
+    // documentation notes that the R/G net names are physically reversed:
+    // {R,G}=2'b10 is green and 2'b01 is red.
+    // LED0: exact NAND image comparison. LED1: DDR read-back comparison.
+    assign led_dual_r[0] = nand_test_pass;
+    assign led_dual_g[0] = boot_error && !nand_test_pass;
+    assign led_dual_r[1] = ddr_test_pass;
+    assign led_dual_g[1] = boot_error && nand_test_pass && !ddr_test_pass;
 endmodule
 
 module soc_vga_clk_div (

@@ -25,9 +25,12 @@ module mem_subsystem(
     input wire periph_enable,
     input wire boot_req_valid,
     output wire boot_req_ready,
+    input wire boot_req_we,
+    input wire [3:0] boot_req_wstrb,
     input wire [31:0] boot_req_addr,
     input wire [31:0] boot_req_wdata,
     output wire boot_resp_valid,
+    output wire [31:0] boot_resp_rdata,
     input wire ps2_clk,
     input wire ps2_dat,
     input wire vga_clk,
@@ -147,10 +150,10 @@ module mem_subsystem(
     wire bridge_req_valid = boot_mem_sel || d_cache_mem_sel || i_cache_mem_sel;
     wire bridge_req_ready;
     wire bridge_req_fire = bridge_req_valid && bridge_req_ready;
-    wire bridge_req_we = boot_mem_sel ? 1'b1 :
+    wire bridge_req_we = boot_mem_sel ? boot_req_we :
                          (d_cache_mem_sel ? d_cache_mem_req_we : 1'b0);
-    wire [3:0] bridge_req_wstrb = boot_mem_sel ? 4'b1111 :
-                                 (d_cache_mem_sel ? d_cache_mem_req_wstrb : 4'b0000);
+    wire [3:0] bridge_req_wstrb = boot_mem_sel ? boot_req_wstrb :
+                                  (d_cache_mem_sel ? d_cache_mem_req_wstrb : 4'b0000);
     wire [31:0] bridge_req_addr = boot_mem_sel ? boot_req_addr :
                                   (d_cache_mem_sel ? d_cache_mem_req_addr : i_cache_mem_req_addr);
     wire [31:0] bridge_req_wdata = boot_mem_sel ? boot_req_wdata :
@@ -170,6 +173,7 @@ module mem_subsystem(
     assign i_cache_mem_req_ready = i_cache_mem_sel && bridge_req_ready;
     assign boot_req_ready = boot_mem_sel && bridge_req_ready;
     assign boot_resp_valid = bridge_resp_valid && bridge_resp_is_boot;
+    assign boot_resp_rdata = bridge_resp_rdata;
     assign d_cache_mem_resp_valid = bridge_resp_valid && !bridge_resp_is_i &&
                                     !bridge_resp_is_boot && !bridge_resp_is_write;
     assign i_cache_mem_resp_valid = bridge_resp_valid && bridge_resp_is_i && !bridge_resp_is_write;

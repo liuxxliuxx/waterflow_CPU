@@ -1,11 +1,14 @@
 `timescale 1ns / 1ps
 
-// Reads a raw, contiguous NAND image and writes it to DDR before the CPU starts.
-// The K9F1G08U0C has 2 KiB data pages, so one NAND page contains 512 words.
+// Performs three independent stages before releasing the CPU:
+//   1. read and compare the complete NAND image,
+//   2. read NAND again and copy it to DDR,
+//   3. read DDR back and compare the complete image.
 module nand_boot_loader #(
-    parameter [24:0] BOOT_NAND_START_WORD  = 25'd0,
+    parameter [24:0] BOOT_NAND_START_WORD   = 25'd0,
     parameter [31:0] BOOT_WORDS             = 32'd1024,
     parameter [31:0] BOOT_LOAD_ADDR         = 32'h1c00_0000,
+    parameter         VERIFY_EXPECTED_IMAGE  = 1'b1,
     parameter [31:0] DDR_TIMEOUT_CYCLES     = 32'd25_000_000,
     parameter [31:0] MIN_READY_WAIT_CYCLES  = 32'd8,
     parameter [31:0] RESET_TIMEOUT_CYCLES   = 32'd25_000_000,
@@ -17,9 +20,12 @@ module nand_boot_loader #(
 
     output wire        ddr_req_valid,
     input  wire        ddr_req_ready,
+    output wire        ddr_req_we,
+    output wire [3:0]  ddr_req_wstrb,
     output wire [31:0] ddr_req_addr,
     output wire [31:0] ddr_req_wdata,
     input  wire        ddr_resp_valid,
+    input  wire [31:0] ddr_resp_rdata,
 
     input  wire [7:0] nand_d_i,
     output wire [7:0] nand_d_o,
@@ -32,6 +38,8 @@ module nand_boot_loader #(
     output reg         nand_wp_n,
     input  wire        nand_rdy,
 
+    output reg         nand_test_pass,
+    output reg         ddr_test_pass,
     output reg         boot_done,
     output reg         boot_error
 );
@@ -45,21 +53,23 @@ module nand_boot_loader #(
     localparam [4:0] S_PAGE_WAIT       = 5'd7;
     localparam [4:0] S_READ_BYTE       = 5'd8;
     localparam [4:0] S_STORE_BYTE      = 5'd9;
-    localparam [4:0] S_DDR_REQ         = 5'd10;
-    localparam [4:0] S_DDR_WAIT        = 5'd11;
-    localparam [4:0] S_DONE            = 5'd12;
-    localparam [4:0] S_ERROR           = 5'd13;
-    localparam [4:0] S_WAIT_READY      = 5'd14;
-    localparam [4:0] S_WR_SETUP        = 5'd15;
-    localparam [4:0] S_WR_LOW          = 5'd16;
-    localparam [4:0] S_WR_LOW_HOLD     = 5'd17;
-    localparam [4:0] S_WR_HIGH         = 5'd18;
-    localparam [4:0] S_WR_RECOVER      = 5'd19;
-    localparam [4:0] S_RD_SETUP        = 5'd20;
-    localparam [4:0] S_RD_LOW          = 5'd21;
-    localparam [4:0] S_RD_WAIT1        = 5'd22;
-    localparam [4:0] S_RD_WAIT2        = 5'd23;
-    localparam [4:0] S_RD_SAMPLE       = 5'd24;
+    localparam [4:0] S_DDR_WRITE_REQ   = 5'd10;
+    localparam [4:0] S_DDR_WRITE_WAIT  = 5'd11;
+    localparam [4:0] S_DDR_VERIFY_REQ  = 5'd12;
+    localparam [4:0] S_DDR_VERIFY_WAIT = 5'd13;
+    localparam [4:0] S_DONE            = 5'd14;
+    localparam [4:0] S_ERROR           = 5'd15;
+    localparam [4:0] S_WAIT_READY      = 5'd16;
+    localparam [4:0] S_WR_SETUP        = 5'd17;
+    localparam [4:0] S_WR_LOW          = 5'd18;
+    localparam [4:0] S_WR_LOW_HOLD     = 5'd19;
+    localparam [4:0] S_WR_HIGH         = 5'd20;
+    localparam [4:0] S_WR_RECOVER      = 5'd21;
+    localparam [4:0] S_RD_SETUP        = 5'd22;
+    localparam [4:0] S_RD_LOW          = 5'd23;
+    localparam [4:0] S_RD_WAIT1        = 5'd24;
+    localparam [4:0] S_RD_WAIT2        = 5'd25;
+    localparam [4:0] S_RD_SAMPLE       = 5'd26;
 
     reg [4:0] state;
     reg [4:0] write_return;
@@ -76,16 +86,56 @@ module nand_boot_loader #(
     reg [31:0] assembled_word;
     reg [31:0] pending_word;
     reg [24:0] source_word;
+    reg [31:0] words_checked;
     reg [31:0] words_written;
+    reg [31:0] verify_word;
+    reg        copy_phase;
     reg [9:0] words_in_page;
     reg [31:0] wait_count;
     reg [31:0] timeout_count;
     reg [31:0] timeout_limit;
 
+    wire verify_phase = (state == S_DDR_VERIFY_REQ) ||
+                        (state == S_DDR_VERIFY_WAIT);
+    wire [31:0] active_ddr_word = verify_phase ? verify_word : words_written;
+    wire [31:0] active_nand_word = copy_phase ? words_written : words_checked;
+    wire [31:0] expected_word_addr = verify_phase ? verify_word : active_nand_word;
+    wire [31:0] expected_word;
+    wire [7:0] expected_byte;
+    wire ddr_word_matches;
+
+    boot_image_rom u_boot_image_rom (
+        .addr(expected_word_addr),
+        .data(expected_word)
+    );
+
+    function [7:0] select_byte;
+        input [31:0] value;
+        input [1:0] index;
+        begin
+            case (index)
+                2'd0: select_byte = value[7:0];
+                2'd1: select_byte = value[15:8];
+                2'd2: select_byte = value[23:16];
+                default: select_byte = value[31:24];
+            endcase
+        end
+    endfunction
+
+    assign expected_byte = select_byte(expected_word, byte_index);
+    assign ddr_word_matches =
+        (ddr_resp_rdata[7:0]   == expected_word[7:0]) &&
+        (ddr_resp_rdata[15:8]  == expected_word[15:8]) &&
+        (ddr_resp_rdata[23:16] == expected_word[23:16]) &&
+        (ddr_resp_rdata[31:24] == expected_word[31:24]);
+
     assign nand_d_o = nand_d_out;
     assign nand_d_oe = nand_d_oe_reg;
-    assign ddr_req_valid = (state == S_DDR_REQ);
-    assign ddr_req_addr = BOOT_LOAD_ADDR + {words_written[29:0], 2'b00};
+    assign ddr_req_valid = (state == S_DDR_WRITE_REQ) ||
+                           (state == S_DDR_VERIFY_REQ);
+    assign ddr_req_we = (state == S_DDR_WRITE_REQ);
+    assign ddr_req_wstrb = ddr_req_we ? 4'b1111 : 4'b0000;
+    assign ddr_req_addr = BOOT_LOAD_ADDR + {active_ddr_word[29:0], 2'b00};
     assign ddr_req_wdata = pending_word;
 
     function [7:0] nand_address_byte;
@@ -138,7 +188,11 @@ module nand_boot_loader #(
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            state <= S_WAIT_DDR;
+            // The image check deliberately runs before DDR calibration is
+            // required, so the two diagnostic LEDs identify independent
+            // NAND and DDR failures. Verification-disabled test builds retain
+            // the original wait-before-copy behavior.
+            state <= VERIFY_EXPECTED_IMAGE ? S_RESET_CMD : S_WAIT_DDR;
             write_return <= S_WAIT_DDR;
             wait_return <= S_WAIT_DDR;
             read_return <= S_WAIT_DDR;
@@ -153,7 +207,10 @@ module nand_boot_loader #(
             assembled_word <= 32'h0000_0000;
             pending_word <= 32'h0000_0000;
             source_word <= BOOT_NAND_START_WORD;
+            words_checked <= 32'd0;
             words_written <= 32'd0;
+            verify_word <= 32'd0;
+            copy_phase <= !VERIFY_EXPECTED_IMAGE;
             words_in_page <= 10'd0;
             wait_count <= 32'd0;
             timeout_count <= 32'd0;
@@ -164,6 +221,8 @@ module nand_boot_loader #(
             nand_re_n <= 1'b1;
             nand_we_n <= 1'b1;
             nand_wp_n <= 1'b1;
+            nand_test_pass <= 1'b0;
+            ddr_test_pass <= 1'b0;
             boot_done <= 1'b0;
             boot_error <= 1'b0;
         end else begin
@@ -197,16 +256,30 @@ module nand_boot_loader #(
                 end
 
                 S_PAGE_CMD00: begin
-                    if (words_written == BOOT_WORDS) begin
-                        state <= S_DONE;
+                    if (!copy_phase && (words_checked == BOOT_WORDS)) begin
+                        nand_test_pass <= 1'b1;
+                        copy_phase <= 1'b1;
+                        source_word <= BOOT_NAND_START_WORD;
+                        timeout_count <= 32'd0;
+                        state <= S_WAIT_DDR;
+                    end else if (copy_phase && (words_written == BOOT_WORDS)) begin
+                        nand_test_pass <= 1'b1;
+                        if (VERIFY_EXPECTED_IMAGE && (BOOT_WORDS != 0)) begin
+                            verify_word <= 32'd0;
+                            timeout_count <= 32'd0;
+                            state <= S_DDR_VERIFY_REQ;
+                        end else begin
+                            ddr_test_pass <= 1'b1;
+                            state <= S_DONE;
+                        end
                     end else begin
                         addr_index <= 3'd0;
                         byte_index <= 2'd0;
                         assembled_word <= 32'h0000_0000;
                         nand_ce_n <= 1'b0;
-                        if ((BOOT_WORDS - words_written) <=
+                        if ((BOOT_WORDS - active_nand_word) <=
                             (32'd512 - {23'd0, source_word[8:0]})) begin
-                            words_in_page <= BOOT_WORDS - words_written;
+                            words_in_page <= BOOT_WORDS - active_nand_word;
                         end else begin
                             words_in_page <= 32'd512 - {23'd0, source_word[8:0]};
                         end
@@ -241,42 +314,115 @@ module nand_boot_loader #(
                 end
 
                 S_STORE_BYTE: begin
-                    case (byte_index)
-                        2'd0: assembled_word[7:0] <= read_sample;
-                        2'd1: assembled_word[15:8] <= read_sample;
-                        2'd2: assembled_word[23:16] <= read_sample;
-                        default: assembled_word[31:24] <= read_sample;
-                    endcase
-
-                    if (byte_index == 2'd3) begin
-                        pending_word <= {read_sample, assembled_word[23:0]};
-                        state <= S_DDR_REQ;
+                    if (VERIFY_EXPECTED_IMAGE && (read_sample != expected_byte)) begin
+                        state <= S_ERROR;
                     end else begin
-                        byte_index <= byte_index + 2'd1;
-                        state <= S_READ_BYTE;
+                        case (byte_index)
+                            2'd0: assembled_word[7:0] <= read_sample;
+                            2'd1: assembled_word[15:8] <= read_sample;
+                            2'd2: assembled_word[23:16] <= read_sample;
+                            default: assembled_word[31:24] <= read_sample;
+                        endcase
+
+                        if (byte_index == 2'd3) begin
+                            byte_index <= 2'd0;
+                            assembled_word <= 32'h0000_0000;
+                            if (!copy_phase) begin
+                                words_checked <= words_checked + 32'd1;
+                                source_word <= source_word + 25'd1;
+                                if ((words_checked + 32'd1) == BOOT_WORDS) begin
+                                    nand_test_pass <= 1'b1;
+                                    copy_phase <= 1'b1;
+                                    source_word <= BOOT_NAND_START_WORD;
+                                    timeout_count <= 32'd0;
+                                    state <= S_WAIT_DDR;
+                                end else if (words_in_page == 10'd1) begin
+                                    state <= S_PAGE_CMD00;
+                                end else begin
+                                    words_in_page <= words_in_page - 10'd1;
+                                    state <= S_READ_BYTE;
+                                end
+                            end else begin
+                                pending_word <= {read_sample, assembled_word[23:0]};
+                                if (!VERIFY_EXPECTED_IMAGE &&
+                                    ((words_written + 32'd1) == BOOT_WORDS))
+                                    nand_test_pass <= 1'b1;
+                                timeout_count <= 32'd0;
+                                state <= S_DDR_WRITE_REQ;
+                            end
+                        end else begin
+                            byte_index <= byte_index + 2'd1;
+                            state <= S_READ_BYTE;
+                        end
                     end
                 end
 
-                S_DDR_REQ: begin
+                S_DDR_WRITE_REQ: begin
                     if (ddr_req_ready) begin
-                        state <= S_DDR_WAIT;
+                        timeout_count <= 32'd0;
+                        state <= S_DDR_WRITE_WAIT;
+                    end else if (timeout_count >= DDR_TIMEOUT_CYCLES) begin
+                        state <= S_ERROR;
+                    end else begin
+                        timeout_count <= timeout_count + 32'd1;
                     end
                 end
 
-                S_DDR_WAIT: begin
+                S_DDR_WRITE_WAIT: begin
                     if (ddr_resp_valid) begin
                         words_written <= words_written + 32'd1;
                         source_word <= source_word + 25'd1;
                         byte_index <= 2'd0;
                         assembled_word <= 32'h0000_0000;
+                        timeout_count <= 32'd0;
                         if ((words_written + 32'd1) == BOOT_WORDS) begin
-                            state <= S_DONE;
+                            if (VERIFY_EXPECTED_IMAGE) begin
+                                verify_word <= 32'd0;
+                                state <= S_DDR_VERIFY_REQ;
+                            end else begin
+                                ddr_test_pass <= 1'b1;
+                                state <= S_DONE;
+                            end
                         end else if (words_in_page == 10'd1) begin
                             state <= S_PAGE_CMD00;
                         end else begin
                             words_in_page <= words_in_page - 10'd1;
                             state <= S_READ_BYTE;
                         end
+                    end else if (timeout_count >= DDR_TIMEOUT_CYCLES) begin
+                        state <= S_ERROR;
+                    end else begin
+                        timeout_count <= timeout_count + 32'd1;
+                    end
+                end
+
+                S_DDR_VERIFY_REQ: begin
+                    if (ddr_req_ready) begin
+                        timeout_count <= 32'd0;
+                        state <= S_DDR_VERIFY_WAIT;
+                    end else if (timeout_count >= DDR_TIMEOUT_CYCLES) begin
+                        state <= S_ERROR;
+                    end else begin
+                        timeout_count <= timeout_count + 32'd1;
+                    end
+                end
+
+                S_DDR_VERIFY_WAIT: begin
+                    if (ddr_resp_valid) begin
+                        timeout_count <= 32'd0;
+                        if (!ddr_word_matches) begin
+                            state <= S_ERROR;
+                        end else if ((verify_word + 32'd1) == BOOT_WORDS) begin
+                            ddr_test_pass <= 1'b1;
+                            state <= S_DONE;
+                        end else begin
+                            verify_word <= verify_word + 32'd1;
+                            state <= S_DDR_VERIFY_REQ;
+                        end
+                    end else if (timeout_count >= DDR_TIMEOUT_CYCLES) begin
+                        state <= S_ERROR;
+                    end else begin
+                        timeout_count <= timeout_count + 32'd1;
                     end
                 end
 

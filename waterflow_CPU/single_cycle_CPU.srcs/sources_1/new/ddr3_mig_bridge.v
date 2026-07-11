@@ -149,7 +149,12 @@ module ddr3_mig_bridge #(
                     cmd_accepted <= 1'b0;
                     wdf_accepted <= 1'b0;
                     if (req_fire) begin
-                        app_addr <= {cpu_req_addr[28:4], 2'b00};
+                        // With x16 DDR3, BL8 and a 128-bit application port,
+                        // one 16-byte application beat advances app_addr by 8
+                        // (the native address unit is one x16 memory word).
+                        // The old [28:4]+2'b00 mapping advanced by only 4, so
+                        // adjacent CPU cache lines overlapped in real DDR.
+                        app_addr <= {1'b0, cpu_req_addr[26:4], 3'b000};
                         app_cmd <= cpu_req_we ? CMD_WRITE : CMD_READ;
                         app_wdf_data <= {4{cpu_req_wdata}};
                         word_sel_q <= cpu_req_addr[3:2];
