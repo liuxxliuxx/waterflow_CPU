@@ -23,6 +23,7 @@ module mem_subsystem(
     output reg [31:0] d_resp_rdata,
     output wire d_resp_err,
     input wire periph_enable,
+    input wire [31:0] boot_status,
     input wire boot_req_valid,
     output wire boot_req_ready,
     input wire boot_req_we,
@@ -42,8 +43,10 @@ module mem_subsystem(
     output wire uart_tx,
     input wire uart_rx,
     output wire [7:0] irq,
-    output wire [7:0] led_value,
-    output wire [31:0] diag_value,
+    output wire [15:0] led_value,
+    output wire [31:0] seg_pattern_lo,
+    output wire [31:0] seg_pattern_hi,
+    output wire [7:0] seg_enable,
     inout wire [7:0] nand_d,
     output wire nand_cle,
     output wire nand_ale,
@@ -90,6 +93,7 @@ module mem_subsystem(
                 (addr[31:16] == 16'h1fe1) ||
                 (addr[31:16] == 16'h1fe2) ||
                 (addr[31:16] == 16'h1fe3) ||
+                (addr[31:16] == 16'h1fe5) ||
                 (addr[31:16] == 16'h1fe6) ||
                 (addr[31:16] == 16'h1fd0);
         end
@@ -226,8 +230,11 @@ module mem_subsystem(
         .nand_we_n(nand_we_n),
         .nand_wp_n(nand_wp_n),
         .nand_rdy(nand_rdy),
+        .boot_status(boot_status),
         .led_value(led_value),
-        .diag_value(diag_value)
+        .seg_pattern_lo(seg_pattern_lo),
+        .seg_pattern_hi(seg_pattern_hi),
+        .seg_enable(seg_enable)
     );
 
     icache_blocking u_icache(

@@ -33,8 +33,11 @@ module mmio_tdm_bus(
     output wire nand_we_n,
     output wire nand_wp_n,
     input wire nand_rdy,
-    output reg [7:0] led_value,
-    output reg [31:0] diag_value
+    input wire [31:0] boot_status,
+    output reg [15:0] led_value,
+    output reg [31:0] seg_pattern_lo,
+    output reg [31:0] seg_pattern_hi,
+    output reg [7:0] seg_enable
 );
     localparam S_IDLE      = 2'd0,
                S_NAND_WAIT = 2'd1,
@@ -46,8 +49,9 @@ module mmio_tdm_bus(
     reg vga_wait_req;
 
     wire [7:0] ps2_rdata;
-    wire ps2_empty, ps2_full, ps2_overflow, ps2_frame_error, ps2_shift, ps2_caps;
+    wire ps2_empty, ps2_full, ps2_overflow, ps2_frame_error;
     reg ps2_rd;
+    reg ps2_clear_errors;
 
     reg vga_we;
     wire vga_busy;
@@ -73,23 +77,27 @@ module mmio_tdm_bus(
     wire dev_vga   = (req_addr[31:16] == 16'h1fe1);
     wire dev_timer = (req_addr[31:16] == 16'h1fe2);
     wire dev_uart  = (req_addr[31:16] == 16'h1fe3);
+    wire dev_seg   = (req_addr[31:16] == 16'h1fe5);
     wire dev_nand  = (req_addr[31:16] == 16'h1fd0);
     wire dev_led   = (req_addr[31:16] == 16'h1fe6);
     wire [15:0] req_offset = req_addr[15:0];
     wire [11:0] vga_word_addr = req_addr[13:2];
     wire ps2_addr_valid = (req_offset == 16'h0000) ||
-                           (req_offset == 16'h0004);
+                           (req_offset == 16'h0004) ||
+                           (req_offset == 16'h0008);
     wire vga_addr_valid = (req_addr[15:14] == 2'b00) &&
-                          ((vga_word_addr < 12'd2400) ||
-                           (vga_word_addr == 12'hffe) ||
-                           (vga_word_addr == 12'hfff));
+                           ((vga_word_addr < 12'd2400) ||
+                            (vga_word_addr == 12'hfff));
     wire timer_addr_valid = (req_offset == 16'h0000);
     wire uart_addr_valid = (req_offset == 16'h0000);
     wire nand_addr_valid = (req_offset == 16'h0000) ||
                            (req_offset == 16'h0004) ||
                            (req_offset == 16'h0008);
-    wire led_addr_valid = (req_offset == 16'h0000) ||
-                          (req_offset == 16'h0004);
+    wire seg_addr_valid = (req_offset == 16'h0000) ||
+                          (req_offset == 16'h0004) ||
+                          (req_offset == 16'h0008) ||
+                          (req_offset == 16'h000c);
+    wire led_addr_valid = (req_offset == 16'h0000);
 
     wire slot_match =
         (dev_ps2 && slot == 3'd0) ||
@@ -97,6 +105,7 @@ module mmio_tdm_bus(
         (dev_timer && slot == 3'd2) ||
         (dev_uart && slot == 3'd3) ||
         (dev_nand && slot == 3'd4) ||
+        (dev_seg && slot == 3'd5) ||
         (dev_led && slot == 3'd7);
 
     assign req_ready = (state == S_IDLE) && (!resp_valid || resp_ready) &&
@@ -112,13 +121,12 @@ module mmio_tdm_bus(
         .ps2_clk(ps2_clk),
         .ps2_dat(ps2_dat),
         .rd_en(ps2_rd),
+        .clear_errors(ps2_clear_errors),
         .rd_data(ps2_rdata),
         .empty(ps2_empty),
         .full(ps2_full),
         .overflow(ps2_overflow),
-        .frame_error(ps2_frame_error),
-        .shift_down(ps2_shift),
-        .caps_lock(ps2_caps)
+        .frame_error(ps2_frame_error)
     );
 
     vga_text u_vga(
@@ -177,6 +185,7 @@ module mmio_tdm_bus(
             resp_rdata <= 32'h0;
             resp_err <= 1'b0;
             ps2_rd <= 1'b0;
+            ps2_clear_errors <= 1'b0;
             vga_we <= 1'b0;
             vga_addr <= 12'h0;
             vga_wdata <= 8'h0;
@@ -188,11 +197,14 @@ module mmio_tdm_bus(
             nand_req_addr <= 8'h0;
             nand_req_wstrb <= 4'h0;
             nand_req_wdata <= 32'h0;
-            led_value <= 8'h00;
-            diag_value <= 32'h5555_0000;
+            led_value <= 16'h0000;
+            seg_pattern_lo <= 32'h0000_0000;
+            seg_pattern_hi <= 32'h0000_0000;
+            seg_enable <= 8'h00;
         end else begin
             slot <= slot + 3'd1;
             ps2_rd <= 1'b0;
+            ps2_clear_errors <= 1'b0;
             vga_we <= 1'b0;
             uart_send <= 1'b0;
             nand_req_valid <= 1'b0;
@@ -212,11 +224,21 @@ module mmio_tdm_bus(
                             if (!ps2_addr_valid) begin
                                 resp_err <= 1'b1;
                             end else if (req_offset == 16'h0000) begin
-                                resp_rdata <= {27'h0, ps2_caps, ps2_shift,
+                                if (req_we)
+                                    resp_err <= 1'b1;
+                                resp_rdata <= {28'h0, ps2_frame_error,
                                                ps2_overflow, ps2_full, ps2_empty};
                             end else if (req_offset == 16'h0004) begin
                                 resp_rdata <= {24'h0, ps2_rdata};
-                                ps2_rd <= !ps2_empty && !req_we;
+                                if (req_we)
+                                    resp_err <= 1'b1;
+                                else
+                                    ps2_rd <= !ps2_empty;
+                            end else if (req_offset == 16'h0008) begin
+                                if (!req_we)
+                                    resp_err <= 1'b1;
+                                else if (|req_wstrb)
+                                    ps2_clear_errors <= 1'b1;
                             end
                             resp_valid <= 1'b1;
                         end else if (dev_vga) begin
@@ -228,8 +250,7 @@ module mmio_tdm_bus(
                                 vga_wdata <= req_wdata[7:0];
                                 vga_we <= req_we;
                                 vga_wait_req <= req_we &&
-                                                ((vga_word_addr == 12'hfff) ||
-                                                 (vga_word_addr == 12'hffe));
+                                                (vga_word_addr == 12'hfff);
                                 state <= S_VGA_RESP;
                             end
                         end else if (dev_timer) begin
@@ -259,16 +280,51 @@ module mmio_tdm_bus(
                                 nand_req_wdata <= req_wdata;
                                 state <= S_NAND_WAIT;
                             end
+                        end else if (dev_seg) begin
+                            if (!seg_addr_valid) begin
+                                resp_err <= 1'b1;
+                            end else begin
+                                case (req_offset)
+                                    16'h0000: begin
+                                        resp_rdata <= seg_pattern_lo;
+                                        if (req_we) begin
+                                            if (req_wstrb[0]) seg_pattern_lo[7:0] <= req_wdata[7:0];
+                                            if (req_wstrb[1]) seg_pattern_lo[15:8] <= req_wdata[15:8];
+                                            if (req_wstrb[2]) seg_pattern_lo[23:16] <= req_wdata[23:16];
+                                            if (req_wstrb[3]) seg_pattern_lo[31:24] <= req_wdata[31:24];
+                                        end
+                                    end
+                                    16'h0004: begin
+                                        resp_rdata <= seg_pattern_hi;
+                                        if (req_we) begin
+                                            if (req_wstrb[0]) seg_pattern_hi[7:0] <= req_wdata[7:0];
+                                            if (req_wstrb[1]) seg_pattern_hi[15:8] <= req_wdata[15:8];
+                                            if (req_wstrb[2]) seg_pattern_hi[23:16] <= req_wdata[23:16];
+                                            if (req_wstrb[3]) seg_pattern_hi[31:24] <= req_wdata[31:24];
+                                        end
+                                    end
+                                    16'h0008: begin
+                                        resp_rdata <= {24'h0, seg_enable};
+                                        if (req_we && req_wstrb[0])
+                                            seg_enable <= req_wdata[7:0];
+                                    end
+                                    default: begin
+                                        resp_rdata <= boot_status;
+                                        if (req_we)
+                                            resp_err <= 1'b1;
+                                    end
+                                endcase
+                            end
+                            resp_valid <= 1'b1;
                         end else if (dev_led) begin
                             if (!led_addr_valid) begin
                                 resp_err <= 1'b1;
                             end else begin
-                                if (req_we && req_offset == 16'h0000)
-                                    led_value <= req_wdata[7:0];
-                                if (req_we && req_offset == 16'h0004)
-                                    diag_value <= req_wdata;
-                                resp_rdata <= (req_offset == 16'h0004) ?
-                                              diag_value : {24'h0, led_value};
+                                if (req_we) begin
+                                    if (req_wstrb[0]) led_value[7:0] <= req_wdata[7:0];
+                                    if (req_wstrb[1]) led_value[15:8] <= req_wdata[15:8];
+                                end
+                                resp_rdata <= {16'h0, led_value};
                             end
                             resp_valid <= 1'b1;
                         end else begin

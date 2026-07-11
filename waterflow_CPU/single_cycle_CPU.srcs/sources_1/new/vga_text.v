@@ -28,63 +28,19 @@ module vga_text(
     wire pix_addr_valid = active && (char_index < 12'd2400);
     wire cpu_addr_valid = (cpu_addr < 12'd2400);
     wire cpu_clear_addr = (cpu_addr == 12'hfff);
-    wire cpu_frame_addr = (cpu_addr == 12'hffe);
-    reg frame_busy;
-    reg [11:0] frame_addr;
-    reg [6:0] frame_col;
-    reg [4:0] frame_row;
-    reg [7:0] frame_char;
-    reg frame_write;
     wire [7:0] ch = pix_addr_valid ? char_mem[char_index] : 8'h20;
     wire [7:0] glyph_row;
     font_rom u_font(.code(ch), .row(vcnt[3:0]), .dots(glyph_row));
     wire glyph = pix_addr_valid && glyph_row[3'd7 - hcnt[2:0]];
     assign hsync = ~((hcnt >= 10'd656) && (hcnt < 10'd752));
     assign vsync = ~((vcnt >= 10'd490) && (vcnt < 10'd492));
-    assign cpu_busy = clear_busy || frame_busy;
+    assign cpu_busy = clear_busy;
     assign cpu_rdata = cpu_clear_addr ? {7'h0, clear_busy} : (cpu_addr_valid ? char_mem[cpu_addr] : 8'h00);
-
-    always @(*) begin
-        frame_write = 1'b0;
-        frame_char = 8'h20;
-        if ((frame_row == 5'd3) && (frame_col == 7'd29)) begin
-            frame_write = 1'b1;
-            frame_char = 8'h2b;
-        end else if ((frame_row == 5'd3) && (frame_col > 7'd29) && (frame_col < 7'd50)) begin
-            frame_write = 1'b1;
-            frame_char = 8'h2d;
-        end else if ((frame_row == 5'd3) && (frame_col == 7'd50)) begin
-            frame_write = 1'b1;
-            frame_char = 8'h2b;
-        end else if ((frame_row > 5'd3) && (frame_row < 5'd24) && (frame_col == 7'd29)) begin
-            frame_write = 1'b1;
-            frame_char = 8'h7c;
-        end else if ((frame_row > 5'd3) && (frame_row < 5'd24) && (frame_col > 7'd29) && (frame_col < 7'd50)) begin
-            frame_write = 1'b1;
-            frame_char = 8'h20;
-        end else if ((frame_row > 5'd3) && (frame_row < 5'd24) && (frame_col == 7'd50)) begin
-            frame_write = 1'b1;
-            frame_char = 8'h7c;
-        end else if ((frame_row == 5'd24) && (frame_col == 7'd29)) begin
-            frame_write = 1'b1;
-            frame_char = 8'h2b;
-        end else if ((frame_row == 5'd24) && (frame_col > 7'd29) && (frame_col < 7'd50)) begin
-            frame_write = 1'b1;
-            frame_char = 8'h2d;
-        end else if ((frame_row == 5'd24) && (frame_col == 7'd50)) begin
-            frame_write = 1'b1;
-            frame_char = 8'h2b;
-        end
-    end
 
     initial begin
         pix_rst_sync = 2'b11;
         clear_busy = 1'b0;
         clear_addr = 12'd0;
-        frame_busy = 1'b0;
-        frame_addr = 12'd0;
-        frame_col = 7'd0;
-        frame_row = 5'd0;
         for (i = 0; i < 2400; i = i + 1) char_mem[i] = 8'h20;
     end
 
@@ -92,10 +48,6 @@ module vga_text(
         if (rst) begin
             clear_busy <= 1'b0;
             clear_addr <= 12'd0;
-            frame_busy <= 1'b0;
-            frame_addr <= 12'd0;
-            frame_col <= 7'd0;
-            frame_row <= 5'd0;
         end else if (clear_busy) begin
             char_mem[clear_addr] <= 8'h20;
             if (clear_addr == 12'd2399) begin
@@ -104,30 +56,9 @@ module vga_text(
             end else begin
                 clear_addr <= clear_addr + 12'd1;
             end
-        end else if (frame_busy) begin
-            if (frame_write) char_mem[frame_addr] <= frame_char;
-            if (frame_addr == 12'd2399) begin
-                frame_busy <= 1'b0;
-                frame_addr <= 12'd0;
-                frame_col <= 7'd0;
-                frame_row <= 5'd0;
-            end else begin
-                frame_addr <= frame_addr + 12'd1;
-                if (frame_col == 7'd79) begin
-                    frame_col <= 7'd0;
-                    frame_row <= frame_row + 5'd1;
-                end else begin
-                    frame_col <= frame_col + 7'd1;
-                end
-            end
         end else if (cpu_we && cpu_clear_addr) begin
             clear_busy <= 1'b1;
             clear_addr <= 12'd0;
-        end else if (cpu_we && cpu_frame_addr) begin
-            frame_busy <= 1'b1;
-            frame_addr <= 12'd0;
-            frame_col <= 7'd0;
-            frame_row <= 5'd0;
         end else if (cpu_we && cpu_addr_valid) begin
             char_mem[cpu_addr] <= cpu_wdata;
         end
