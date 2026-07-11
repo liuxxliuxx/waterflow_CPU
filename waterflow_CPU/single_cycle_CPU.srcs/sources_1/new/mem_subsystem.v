@@ -56,6 +56,7 @@ module mem_subsystem(
     output wire nand_wp_n,
     input wire nand_rdy,
     input wire ddr_sys_clk_i,
+    input wire ddr_rst_n,
     output wire ddr_ui_clk,
     output wire ddr_ui_rst,
     output wire ddr_init_calib_complete,
@@ -276,8 +277,9 @@ module mem_subsystem(
         .mem_resp_rdata(d_cache_mem_resp_rdata)
     );
 
-    // CPU/cache/MMIO run in clk's 25 MHz domain. The MIG application port
-    // remains in ddr_ui_clk's domain, so requests and responses cross here.
+    // CPU, caches, and MMIO share clk's 25 MHz domain. The MIG application
+    // port remains in ddr_ui_clk's domain, so requests and responses cross
+    // only at this boundary.
     ddr_cdc_bridge u_ddr_cdc_bridge(
         .src_clk(clk),
         .src_rst_n(rst),
@@ -304,7 +306,7 @@ module mem_subsystem(
 
     ddr3_mig_bridge u_ddr3_bridge(
         .sys_clk_i(ddr_sys_clk_i),
-        .sys_rst(rst_hi),
+        .sys_rst(!ddr_rst_n),
         .ui_clk(ddr_ui_clk),
         .ui_rst(ddr_ui_rst),
         .init_calib_complete(ddr_init_calib_complete),

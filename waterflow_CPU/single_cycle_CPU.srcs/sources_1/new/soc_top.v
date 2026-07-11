@@ -49,7 +49,13 @@ module soc_top #(
     wire ddr_ui_clk;
     wire ddr_ui_rst;
     wire ddr_init_calib_complete;
-    wire soc_clk_25;
+    wire cpu_clk_25;
+    wire ddr_clk_100;
+    wire vga_clk_25;
+    wire clk_wiz_locked;
+    wire clock_reset_n;
+    wire clk25_reset_n;
+    wire ddr_reset_n;
     wire cpu_rst_n;
     wire ddr_ready_25;
 
@@ -79,6 +85,7 @@ module soc_top #(
     wire [31:0] boot_ddr_req_wdata;
     wire boot_ddr_resp_valid;
     wire [31:0] boot_ddr_resp_rdata;
+
     wire boot_done;
     wire boot_error;
     wire [31:0] boot_status;
@@ -108,9 +115,37 @@ module soc_top #(
     // The board pulls NAND WP# high externally; this SoC only performs reads.
     assign nand_wp_unused = nand_boot_owner ? nand_boot_wp_n : nand_mmio_wp_n;
 
+    // clk_wiz_0 is the sole fabric clock source.  clk_out1 drives the shared
+    // CPU/memory-control domain, clk_out2 supplies the 100 MHz MIG system
+    // clock, and clk_out3 is reserved for the VGA pixel pipeline.
+    clk_wiz_0 u_clk_wiz_0 (
+        .clk_out1(cpu_clk_25),
+        .clk_out2(ddr_clk_100),
+        .clk_out3(vga_clk_25),
+        .reset(!rst_n),
+        .locked(clk_wiz_locked),
+        .clk_in1(sys_clk_i)
+    );
+
+    assign clock_reset_n = rst_n && clk_wiz_locked;
+
+    // Assert reset asynchronously and release it only after each clock is
+    // running.  This prevents logic from starting while the MMCM is locking.
+    soc_reset_sync u_cpu_reset_sync (
+        .clk(cpu_clk_25),
+        .arst_n(clock_reset_n),
+        .rst_n(clk25_reset_n)
+    );
+
+    soc_reset_sync u_ddr_reset_sync (
+        .clk(ddr_clk_100),
+        .arst_n(clock_reset_n),
+        .rst_n(ddr_reset_n)
+    );
+
     soc_boot_board_control u_boot_board_control (
-        .clk(soc_clk_25),
-        .rst_n(rst_n),
+        .clk(cpu_clk_25),
+        .rst_n(clk25_reset_n),
         .ddr_ready_async(ddr_init_calib_complete && !ddr_ui_rst),
         .nand_rdy_async(nand_rdy),
         .boot_done(boot_done),
@@ -148,21 +183,13 @@ module soc_top #(
         .boot_display_active()
     );
 
-    // sys_clk_i is the 100 MHz board clock. CPU, caches, MMIO, NAND boot, and
-    // VGA run at this divide-by-four 25 MHz clock; only MIG remains at UI clk.
-    soc_vga_clk_div u_vga_clk_div (
-        .clk(sys_clk_i),
-        .rst_n(rst_n),
-        .clk_out(soc_clk_25)
-    );
-
     nand_boot_loader #(
         .BOOT_NAND_START_WORD(BOOT_NAND_START_WORD),
         .BOOT_LOAD_ADDR(BOOT_LOAD_ADDR),
         .MAX_PAYLOAD_BYTES(BOOT_MAX_PAYLOAD_BYTES)
     ) u_boot_loader (
-        .clk(soc_clk_25),
-        .rst_n(rst_n),
+        .clk(cpu_clk_25),
+        .rst_n(clk25_reset_n),
         .ddr_ready(ddr_ready_25),
         .ddr_req_valid(boot_ddr_req_valid),
         .ddr_req_ready(boot_ddr_req_ready),
@@ -188,7 +215,7 @@ module soc_top #(
     );
 
     CPU u_cpu (
-        .clk(soc_clk_25),
+        .clk(cpu_clk_25),
         .rst(cpu_rst_n),
         .test_addr(5'd0),
         .test_data(),
@@ -214,8 +241,8 @@ module soc_top #(
     );
 
     mem_subsystem u_mem_subsystem (
-        .clk(soc_clk_25),
-        .rst(rst_n),
+        .clk(cpu_clk_25),
+        .rst(clk25_reset_n),
         .i_req_valid(inst_req_valid && cpu_rst_n),
         .i_req_ready(inst_req_ready),
         .i_req_vaddr(inst_req_vaddr),
@@ -247,7 +274,7 @@ module soc_top #(
         .boot_resp_rdata(boot_ddr_resp_rdata),
         .ps2_clk(ps2_clk),
         .ps2_dat(ps2_dat),
-        .vga_clk(soc_clk_25),
+        .vga_clk(vga_clk_25),
         .vga_r(vga_r),
         .vga_g(vga_g),
         .vga_b(vga_b),
@@ -267,8 +294,9 @@ module soc_top #(
         .nand_re_n(nand_mmio_re_n),
         .nand_we_n(nand_mmio_we_n),
         .nand_wp_n(nand_mmio_wp_n),
-        .nand_rdy(nand_rdy_25),
-        .ddr_sys_clk_i(sys_clk_i),
+        .nand_rdy(nand_rdy),
+        .ddr_sys_clk_i(ddr_clk_100),
+        .ddr_rst_n(ddr_reset_n),
         .ddr_ui_clk(ddr_ui_clk),
         .ddr_ui_rst(ddr_ui_rst),
         .ddr_init_calib_complete(ddr_init_calib_complete),
@@ -289,8 +317,8 @@ module soc_top #(
     );
 
     sevenseg_scan u_sevenseg_scan (
-        .clk(soc_clk_25),
-        .rst(!rst_n),
+        .clk(cpu_clk_25),
+        .rst(!clk25_reset_n),
         .pattern_lo(active_seg_pattern_lo),
         .pattern_hi(active_seg_pattern_hi),
         .enable(active_seg_enable),
@@ -298,6 +326,25 @@ module soc_top #(
         .seg(seg)
     );
 
+endmodule
+
+// Reset assertion is immediate.  Release is synchronized locally so every
+// clock domain starts only after clk_wiz_0 reports a stable clock.
+module soc_reset_sync (
+    input  wire clk,
+    input  wire arst_n,
+    output wire rst_n
+);
+    (* ASYNC_REG = "TRUE" *) reg [1:0] release_sync;
+
+    always @(posedge clk or negedge arst_n) begin
+        if (!arst_n)
+            release_sync <= 2'b00;
+        else
+            release_sync <= {release_sync[0], 1'b1};
+    end
+
+    assign rst_n = release_sync[1];
 endmodule
 
 module soc_boot_board_control #(
@@ -433,30 +480,4 @@ module soc_boot_board_control #(
             end
         end
     end
-endmodule
-
-module soc_vga_clk_div (
-    input wire clk,
-    input wire rst_n,
-    output wire clk_out
-);
-    reg [1:0] div_count;
-    reg pix_clk;
-
-    always @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            div_count <= 2'd0;
-            pix_clk <= 1'b0;
-        end else if (div_count == 2'd1) begin
-            div_count <= 2'd0;
-            pix_clk <= ~pix_clk;
-        end else begin
-            div_count <= div_count + 2'd1;
-        end
-    end
-
-    BUFG u_pix_clk_bufg (
-        .I(pix_clk),
-        .O(clk_out)
-    );
 endmodule
