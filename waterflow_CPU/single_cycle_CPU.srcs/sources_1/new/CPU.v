@@ -1,1514 +1,5 @@
 `include "CPU_def.vh"
 
-module IFU(
-    input clk,
-    input rst,
-
-    input if_allowin,
-
-    input         redirect_valid,
-    input  [31:0] redirect_pc,
-
-    input         pred_taken,
-    input  [31:0] pred_target,
-
-    output        if_valid,
-    output [31:0] if_pc,
-    output [31:0] if_pc4,
-    output [31:0] if_inst,
-    output        if_err,
-
-    output        inst_req_valid,
-    input         inst_req_ready,
-    output [31:0] inst_req_vaddr,
-
-    input         inst_resp_valid,
-    input  [31:0] inst_resp_data,
-    input         inst_resp_err
-);
-    reg [31:0] fetch_pc;
-    reg        req_pending;
-    reg [31:0] req_pc_hold;
-
-    reg req_kill;
-    reg out_valid;
-    reg [31:0] out_pc;
-    reg [31:0] out_inst;
-    reg out_err;
-
-    wire[31:0] out_pc4 = out_pc + 32'd4;
-
-    wire out_fire = out_valid && if_allowin;
-
-    wire[31:0] pred_next_pc = pred_taken ? pred_target : out_pc4;
-
-    wire can_issue = !req_pending && (!out_valid || if_allowin);
-
-    wire [31:0] issue_pc =
-        redirect_valid ? redirect_pc :
-        (out_valid && if_allowin) ? pred_next_pc : fetch_pc;
-
-    assign inst_req_valid = can_issue;
-    assign inst_req_vaddr = issue_pc;
-
-    wire req_fire = inst_req_valid && inst_req_ready;
-
-    assign if_valid = out_valid;
-    assign if_pc    = out_pc;
-    assign if_pc4   = out_pc4;
-    assign if_inst  = out_inst;
-    assign if_err   = out_err;
-
-    always @(posedge clk or negedge rst) begin
-        if (!rst) begin
-            fetch_pc    <= 32'h1C000000;
-
-            req_pending <= 1'b0;
-            req_pc_hold <= 32'b0;
-            req_kill    <= 1'b0;
-
-            out_valid   <= 1'b0;
-            out_pc      <= 32'b0;
-            out_inst    <= 32'b0;
-            out_err     <= 1'b0;
-        end
-        else begin
-            if (redirect_valid) begin
-                fetch_pc  <= redirect_pc;
-                out_valid <= 1'b0;
-                out_pc    <= 32'b0;
-                out_inst  <= 32'b0;
-                out_err   <= 1'b0;
-
-                if (req_pending) begin
-                    req_kill <= 1'b1;
-                end
-            end
-
-            if (out_fire && !redirect_valid) begin
-                out_valid <= 1'b0;
-                fetch_pc  <= pred_next_pc;
-            end
-
-            if (inst_resp_valid && req_pending) begin
-                req_pending <= 1'b0;
-
-                if (req_kill || redirect_valid) begin
-                    req_kill <= 1'b0;
-                end
-                else begin
-                    out_valid <= 1'b1;
-                    out_pc    <= req_pc_hold;
-                    out_inst  <= inst_resp_data;
-                    out_err   <= inst_resp_err;
-                    req_kill  <= 1'b0;
-                end
-            end
-
-            if (req_fire) begin
-                req_pending <= 1'b1;
-                req_pc_hold <= inst_req_vaddr;
-                req_kill    <= 1'b0;
-            end
-        end
-    end
-
-endmodule
-
-module Control_Unit(
-    input     [31:0] inst,
-    output           regWr,
-    output reg[3:0]  branch,
-    output           RegDst,
-    output           RegDst1,
-    output reg[4:0]  ALUctr,
-    output           ALUSrc1,
-    output reg[1:0]  ALUSrc2,
-    output           Src1Used,
-    output           Src2Used,
-    output reg[3:0]  ImmType,
-
-    output           MemWr,
-    output           MemRd,
-    output           MemEn,
-    output reg[1:0]  MemSz,
-    output           MemSel,
-    output           MemZeroExt,
-
-    output    [2:0]  alsl_shift,
-
-    output reg[1:0]  UnitSel,
-    output reg[2:0]  MDUctr,
-
-    output           need_priv,
-    output           inst_valid,
-    output           fp_inst,
-    output           trap_sys,
-    output           trap_brk,
-    output           rdtime_inst,
-
-
-    output           csr_en,
-    output           csr_we,
-    output reg [1:0] csr_op,
-    output [13:0]    csr_num,
-    output reg[2:0]  specop,
-    
-    
-    output           FpRegWr,
-    output reg[3:0]  FPUctr,
-    output           FptoGpr,
-    output           GprtoFp,
-    output           FpSrc2,
-    output           FpSrc1Used,
-    output           FpSrc2Used,
-
-    output reg[3:0]  WB_Sel,
-    output reg[1:0]  FPWB_Sel,
-
-    output           issc,
-    output           isll
-    
-    );
-    
-    wire nop    = (inst        == 32'h03400000);
-    wire add_w  = (inst[31:15] == 17'h00020);
-    wire sub_w  = (inst[31:15] == 17'h00022);
-    wire nor_   = (inst[31:15] == 17'h00028);
-    wire and_   = (inst[31:15] == 17'h00029);
-    wire or_    = (inst[31:15] == 17'h0002A);
-    wire xor_   = (inst[31:15] == 17'h0002B);
-    wire slt    = (inst[31:15] == 17'h00024);
-    wire sltu   = (inst[31:15] == 17'h00025);
-    wire andn   = (inst[31:15] == 17'h0002C);//rk与rj的按位与取反
-    wire orn    = (inst[31:15] == 17'h0002D);//rk与rj的按位或取反
-    wire sll_w  = (inst[31:15] == 17'h0002E);
-    wire srl_w  = (inst[31:15] == 17'h0002F);
-    wire sra_w  = (inst[31:15] == 17'h00030);
-    wire mul_w  = (inst[31:15] == 17'h00038);
-    wire mulh_w = (inst[31:15] == 17'h00039);//
-    wire mulh_wu= (inst[31:15] == 17'h0003A);//
-    wire div_w  = (inst[31:15] == 17'h00040);//
-    wire mod_w  = (inst[31:15] == 17'h00041);//
-    wire div_wu = (inst[31:15] == 17'h00042);//
-    wire mod_wu = (inst[31:15] == 17'h00043);//
-    
-    wire slli_w = (inst[31:15] == 17'h00081);
-    wire srli_w = (inst[31:15] == 17'h00089);
-    wire srai_w = (inst[31:15] == 17'h00091);
-    
-    wire ext_w_h= (inst[31:15] == 17'h00002);//rj[15:0]符号扩展�??32�??
-    wire ext_w_b= (inst[31:15] == 17'h00003);//rj[7:0]符号扩展�??32�??
-    wire clz_w  = (inst[31:15] == 17'h00004);//rj从高位开始连�??0的个�??
-    wire ctz_w  = (inst[31:15] == 17'h00005);//rj从低位开始连�??0的个�??
-    wire clo_w  = (inst[31:15] == 17'h00006);//rj从高位开始连�??1的个�??
-    wire cto_w  = (inst[31:15] == 17'h00007);//rj从低位开始连�??1的个�??
-
-    wire cpucfg = (inst[31:15] == 17'h0000b);//读CPU配置寄存�??
-
-    wire maskeqz= (inst[31:15] == 17'h00070);//如果rk==0�??0，否则写rj
-    wire masknez= (inst[31:15] == 17'h00071);//如果rk!=0�??0，否则写rj
-
-    wire break_ = (inst[31:15] == 17'h00054);//断点异常
-    wire syscall= (inst[31:15] == 17'h00056);//系统调用，触发系统异�??
-
-    wire ertn   = (inst        == 32'h0648_3800);//返回异常处理程序
-
-    wire dbar   = (inst[31:15] == 17'h070e4);//数据访问屏障
-    wire ibar   = (inst[31:15] == 17'h070e5);//指令访问屏障
-    wire idle   = (inst[31:15] == 17'h00c91);//等待中断
-    wire cacop  = (inst[31:22] == 10'h018);//cache操作指令
-
-    wire ll_w   = (inst[31:24] == 8'h20);//读内�??+记录地址+设置llbit
-    wire sc_w   = (inst[31:24] == 8'h21);//判断llbit，如果是1就写内存并且rd�??1，否则rd�??0不写内存
-
-    wire csrrd  = (inst[31:24] == 8'h04) && (inst[9:5] == 5'h0);//从CSR寄存器中读数据到通用寄存�??
-    wire csrwr  = (inst[31:24] == 8'h04) && (inst[9:5] == 5'h1);//将rd数据写入CSR寄存�??
-
-    wire csrxchg= (inst[31:24] == 8'h04) && (inst[9:5] != 5'd0) && (inst[9:5] != 5'd1);//按rj掩码把rd数据写入CSR寄存器，并将CSR寄存器原来的值写入rd
-    
-    wire rdtimel_w=(inst[31:15]==17'h00000)&&(inst[14:10]==5'h18);//�??64位计时器�??32�??
-    wire rdtimeh_w=(inst[31:15]==17'h00000)&&(inst[14:10]==5'h19);//�??64位计时器�??32�??
-    
-    
-
-    wire alsl_w = (inst[31:17] == 15'h0002);//把rj左移sa2位后加rk
-    
-    
-    wire fadd_s = (inst[31:15] == 17'h00201);//
-    wire fsub_s = (inst[31:15] == 17'h00205);//
-    wire fmul_s = (inst[31:15] == 17'h00209);//
-    
-    wire fmov_s     = (inst[31:10] == 22'h004525);//
-    wire movgr2fr_w = (inst[31:10] == 22'h004529);//
-    wire movfr2gr_s = (inst[31:10] == 22'h00452d);//
-    
-    wire fld_s  = (inst[31:22] == 10'h0ac);//
-    wire fst_s  = (inst[31:22] == 10'h0ad);//
-    
-    wire bstrins_w = (inst[31:22] == 10'h006); //未实�??
-    wire bstrpick_w= (inst[31:22] == 10'h007); //未实�??
-    wire slti   = (inst[31:22] == 10'h008);//
-    wire sltui  = (inst[31:22] == 10'h009);//
-
-    wire addi_w = (inst[31:22] == 10'h00a);
-    wire andi   = (inst[31:22] == 10'h00d);//
-    wire ori    = (inst[31:22] == 10'h00e);//
-    wire xori   = (inst[31:22] == 10'h00f);//
-    wire ld_b   = (inst[31:22] == 10'h0a0);//
-    wire ld_h   = (inst[31:22] == 10'h0a1);//
-    wire ld_w   = (inst[31:22] == 10'h0a2);
-    wire st_b   = (inst[31:22] == 10'h0a4);//
-    wire st_h   = (inst[31:22] == 10'h0a5);//
-    wire st_w   = (inst[31:22] == 10'h0a6);
-    wire ld_bu  = (inst[31:22] == 10'h0a8);//
-    wire ld_hu  = (inst[31:22] == 10'h0a9);//
-    
-    
-    wire lu12i_w= (inst[31:25] == 7'h0a);
-    wire pcaddi = (inst[31:25] == 7'h0c);//计算PC值加上（20位立即数左移2位）
-    wire pcalau12i=(inst[31:25] == 7'h0d);//计算PC值加�??20位立即数，取�??4�??
-    wire pcaddu12i=(inst[31:25] == 7'h0e);//计算PC值加上（20位立即数左移12位）
-    
-    wire beqz   = (inst[31:26] == 6'h10);
-    wire bnez   = (inst[31:26] == 6'h11);
-    wire jirl   = (inst[31:26] == 6'h13);
-    wire b      = (inst[31:26] == 6'h14);
-    wire bl     = (inst[31:26] == 6'h15);
-    wire beq    = (inst[31:26] == 6'h16);
-    wire bne    = (inst[31:26] == 6'h17);
-    wire blt    = (inst[31:26] == 6'h18);
-    wire bge    = (inst[31:26] == 6'h19);//有符号大于等于跳�??
-    wire bltu   = (inst[31:26] == 6'h1a);//无符号小于跳�??
-    wire bgeu   = (inst[31:26] == 6'h1b);
-
-    
-    
-    wire r_type = add_w | sub_w | mul_w | and_ | nor_ | xor_ | or_ | slt | sltu | sll_w | srl_w | sra_w | andn | orn | mulh_w | mulh_wu | div_w | mod_w | div_wu | mod_wu | alsl_w | maskeqz | masknez ;
-    
-    wire load_gpr  = ld_b | ld_h | ld_w | ld_bu | ld_hu | ll_w;
-    wire store_gpr = st_b | st_h | st_w | sc_w;
-
-    wire load_fp   = fld_s;
-    wire store_fp  = fst_s;
-
-    wire br_2src = beq | bne | blt | bge | bltu | bgeu;
-    wire br_1src = beqz | bnez;
-    wire br_uncond = b | bl | jirl;
-
-    wire imm_alu = addi_w | slti | sltui | andi | ori | xori
-                | slli_w | srli_w | srai_w | lu12i_w;
-
-    wire pc_alu  = pcaddi | pcaddu12i | pcalau12i;
-
-    wire one_src_alu = ext_w_h | ext_w_b | clz_w | ctz_w | clo_w | cto_w | cpucfg;
-
-    wire csr_inst = csrrd | csrwr | csrxchg;
-    wire timer_inst = rdtimel_w | rdtimeh_w;
-
-    assign fp_inst = fadd_s | fsub_s | fmul_s | fmov_s
-                | movgr2fr_w | movfr2gr_s
-                | fld_s | fst_s;
-
-    assign need_priv = csr_inst | ertn | idle | cacop;
-
-    wire valid_alu_inst = nop
-                        | r_type
-                        | addi_w | slti | sltui | andi | ori | xori
-                        | slli_w | srli_w | srai_w
-                        | ext_w_h | ext_w_b | clz_w | ctz_w | clo_w | cto_w
-                        | lu12i_w | pcaddi | pcaddu12i | pcalau12i
-                        | cpucfg;
-
-    wire valid_mem_inst = ld_b | ld_h | ld_w | ld_bu | ld_hu
-                        | st_b | st_h | st_w
-                        | ll_w | sc_w
-                        | fld_s | fst_s;
-
-    wire valid_branch_inst = beq | bne | blt | bge | bltu | bgeu
-                            | beqz | bnez | b | bl | jirl;
-
-    wire valid_special_inst = syscall | break_ | ertn
-                            | dbar | ibar | idle | cacop
-                            | csr_inst | timer_inst;
-
-    assign inst_valid = valid_alu_inst
-                    | valid_mem_inst
-                    | valid_branch_inst
-                    | fp_inst
-                    | valid_special_inst;
-    
-    
-    assign regWr    =   // 3R / 2R / 普�?? ALU �?? GPR
-                        r_type
-                        | addi_w | slti | sltui | andi | ori | xori
-                        | slli_w | srli_w | srai_w
-                        | lu12i_w
-                        | ext_w_h | ext_w_b | clz_w | ctz_w | clo_w | cto_w
-                        | pcaddi | pcaddu12i | pcalau12i
-                        | cpucfg
-                        | rdtimel_w | rdtimeh_w
-
-                        // load 类写 GPR
-                        | ld_b | ld_h | ld_w | ld_bu | ld_hu | ll_w
-
-                        // sc.w 要写 rd = 成功/失败标志
-                        | sc_w
-
-                        // 跳转链接�?? GPR
-                        | bl | jirl
-
-                        // CSR 指令会把 CSR 旧�?�写 rd
-                        | csrrd | csrwr | csrxchg
-
-                        // 浮点转�?�用寄存�??
-                        | movfr2gr_s;
-
-    assign RegDst   = store_gpr | beq | bne | blt | bge | bltu | bgeu | csrwr | csrxchg;
-    assign RegDst1  = bl;
-    assign ALUSrc1  = bl | jirl | pcaddi | pcaddu12i | pcalau12i;
-    assign MemWr    = st_b|st_h|st_w|fst_s|sc_w;
-    assign MemRd    = ld_b|ld_h|ld_w|ld_bu|ld_hu|ll_w|fld_s;
-    assign MemEn    = MemWr | MemRd ;
-    assign MemZeroExt=ld_bu|ld_hu;
-    assign trap_sys  = syscall;
-    assign trap_brk  = break_;
-    assign rdtime_inst = rdtimel_w | rdtimeh_w;
-
-    assign Src1Used = r_type
-                    | addi_w | slti | sltui | andi | ori | xori
-                    | slli_w | srli_w | srai_w
-                    | ext_w_h | ext_w_b | clz_w | ctz_w | clo_w | cto_w
-                    | load_gpr | store_gpr
-                    | load_fp | store_fp
-                    | br_1src | br_2src | jirl
-                    | cpucfg
-                    | csrxchg
-                    | movgr2fr_w
-                    | cacop;
-
-    assign Src2Used = r_type
-                    | store_gpr
-                    | br_2src
-                    | csrwr
-                    | csrxchg;
-
-    assign alsl_shift = {1'b0,inst[16:15]}+3'd1;
-    
-    assign isll = ll_w;
-    assign issc = sc_w;
-    
-    assign FpRegWr    = fadd_s | fsub_s | fmul_s | fmov_s | movgr2fr_w | fld_s ;
-    assign FptoGpr    = movfr2gr_s ;
-    assign GprtoFp    = movgr2fr_w ;
-    assign FpSrc1Used = fadd_s | fsub_s | fmul_s | fmov_s | movfr2gr_s ;
-    assign FpSrc2Used = fadd_s | fsub_s | fmul_s | fst_s ;
-    assign FpSrc2      = fst_s;
-
-    assign MemSel     = fst_s;
-
-    assign csr_en  = csrrd | csrwr | csrxchg;
-    assign csr_we  = csrwr | csrxchg;
-    assign csr_num = inst[23:10];
-
-    always @(*) begin
-        case (1'b1)
-            csrrd:   csr_op = `CSR_RD;
-            csrwr:   csr_op = `CSR_WR;
-            csrxchg: csr_op = `CSR_XCHG;
-            default: csr_op = `CSR_RD;
-        endcase
-    end
-
-    always @(*) begin
-        case(1'b1)
-            // ALU 第二操作数来自立即数
-            addi_w, slti, sltui, andi, ori, xori,
-            slli_w, srli_w, srai_w,
-            lu12i_w,
-            ld_b, ld_h, ld_w, ld_bu, ld_hu,
-            st_b, st_h, st_w,
-            fld_s, fst_s,
-            ll_w, sc_w,
-            pcaddi, pcaddu12i, pcalau12i,
-            cacop:
-                ALUSrc2 = 2'b01;
-
-            // PC + 4
-            bl, jirl:
-                ALUSrc2 = 2'b10;
-
-            // rk
-            default:
-            ALUSrc2 = 2'b00;
-        endcase
-    end
-
-    always @(*) begin
-        case(1'b1)
-            mul_w, mulh_w, mulh_wu, div_w, mod_w, div_wu, mod_wu:
-                UnitSel = `MDU_use;
-            fadd_s, fsub_s, fmul_s, fmov_s:
-                UnitSel = `FPU_use;
-            default:
-                UnitSel = `ALU_use;
-        endcase
-    end
-
-    always @(*) begin
-        case(1'b1)
-            ld_b | ld_bu | st_b: MemSz = 2'b00;
-            ld_h | ld_hu | st_h: MemSz = 2'b01;
-            ld_w | st_w  | fst_s | fld_s | ll_w | sc_w :MemSz = 2'b10;
-            default:             MemSz = 2'b10;
-        endcase
-    end
-    
-    always @(*) begin
-        case(1'b1)
-            nop  :   ALUctr = `ALU_NOP;
-
-            add_w,
-            addi_w,
-            ld_b, ld_h, ld_w, ld_bu, ld_hu,
-            st_b, st_h, st_w,
-            fld_s, fst_s,
-            ll_w, sc_w,
-            bl, jirl,
-            pcaddi,
-            pcaddu12i,
-            cacop:
-                ALUctr = `ALU_ADD ;
-            
-            sub_w,
-            beq, bne, blt, bge, bltu, bgeu:
-                ALUctr = `ALU_SUB;
-
-            and_, andi:      ALUctr = `ALU_AND;
-            or_, ori:        ALUctr = `ALU_OR;
-            xor_, xori:      ALUctr = `ALU_XOR;
-            nor_:            ALUctr = `ALU_NOR;
-
-            slt, slti:       ALUctr = `ALU_SLT;
-            sltu, sltui:     ALUctr = `ALU_SLTU;
-
-            sll_w, slli_w:   ALUctr = `ALU_SLL;
-            srl_w, srli_w:   ALUctr = `ALU_SRL;
-            sra_w, srai_w:   ALUctr = `ALU_SRA;
-
-            lu12i_w:         ALUctr = `ALU_LU12I;
-
-            ext_w_h:         ALUctr = `ALU_EXT_H;
-            ext_w_b:         ALUctr = `ALU_EXT_B;
-            clz_w:           ALUctr = `ALU_CLZ;
-            ctz_w:           ALUctr = `ALU_CTZ;
-            clo_w:           ALUctr = `ALU_CLO;
-            cto_w:           ALUctr = `ALU_CTO;
-
-            andn:            ALUctr = `ALU_ANDN;
-            orn:             ALUctr = `ALU_ORN;
-
-            alsl_w:          ALUctr = `ALU_ALSL;
-            maskeqz:         ALUctr = `ALU_MASKEQZ;
-            masknez:         ALUctr = `ALU_MASKNEZ;
-
-            pcalau12i:       ALUctr = `ALU_PCALAU;
-            cpucfg:          ALUctr = `ALU_CPUCFG;
-
-            default:         ALUctr = `ALU_NOP;
-        endcase
-    end
-    
-    always @(*) begin
-        case(1'b1)
-            fadd_s:  FPUctr = `FP_adds;
-            fsub_s:  FPUctr = `FP_subs;
-            fmul_s:  FPUctr = `FP_muls;
-            fmov_s:  FPUctr = `FP_movs;
-            default: FPUctr = `FP_none;
-        endcase
-    end
-    
-    always @(*) begin
-        case(1'b1)
-            bne:     branch = `BR_BNE;
-            blt:     branch = `BR_BLT;
-            b  :     branch = `BR_B;
-            bl :     branch = `BR_B;
-            jirl:    branch = `BR_JIRL;
-            beqz:    branch = `BR_BEQZ;
-            bgeu:    branch = `BR_BGEU;
-            beq :    branch = `BR_BEQ;
-            bge :    branch = `BR_BGE;
-            bltu:    branch = `BR_BLTU;
-            bnez:    branch = `BR_BNEZ;
-            default: branch = `BR_NONE;
-        endcase
-    end
-
-    always @(*) begin
-        case(1'b1)
-            ld_b, ld_h, ld_w, ld_bu, ld_hu, ll_w: WB_Sel = `WB_MEM;
-            sc_w: WB_Sel = `WB_SC;
-            bl,jirl: WB_Sel = `WB_PC4;
-            csrrd, csrwr, csrxchg: WB_Sel = `WB_CSR;
-            cpucfg: WB_Sel = `WB_CPUCFG;
-            rdtimel_w, rdtimeh_w: WB_Sel = `WB_TIMER;
-            movfr2gr_s: WB_Sel = `WB_FPR;
-            mul_w, mulh_w, mulh_wu, div_w, mod_w, div_wu, mod_wu: WB_Sel = `WB_MDU;
-            default: WB_Sel = `WB_ALU;
-        endcase
-    end
-
-    always @(*) begin
-        case(1'b1)
-            mul_w:      MDUctr = `MDU_MULW;
-            mulh_w:     MDUctr = `MDU_MULHW;
-            mulh_wu:    MDUctr = `MDU_MULHWU;
-            div_w:      MDUctr = `MDU_DIVW;
-            mod_w:      MDUctr = `MDU_MODW;
-            div_wu:     MDUctr = `MDU_DIVWU;
-            mod_wu:     MDUctr = `MDU_MODWU;
-            default:    MDUctr = `MDU_NONE;
-        endcase
-    end
-
-    always @(*) begin
-        case(1'b1)
-            fld_s: FPWB_Sel = `FPWB_MEM;
-            movgr2fr_w: FPWB_Sel = `FPWB_GPR;
-            default: FPWB_Sel = `FPWB_FPU;
-        endcase
-    end
-    
-
-    always @(*) begin
-        case (1'b1)
-            ertn:    specop = `SP_ERTN;
-            dbar:    specop = `SP_DBAR;
-            ibar:    specop = `SP_IBAR;
-            idle:    specop = `SP_IDLE;
-            cacop:   specop = `SP_CACOP;
-            default: specop = `SP_NONE;
-        endcase
-    end
-
-    always @(*) begin
-        case (1'b1)
-            addi_w, slti, sltui,
-            ld_b, ld_h, ld_w, ld_bu, ld_hu,
-            st_b, st_h, st_w,
-            fld_s, fst_s, cacop:
-                ImmType = `IMM_SI12;
-
-            andi, ori, xori:
-                ImmType = `IMM_UI12;
-
-            slli_w, srli_w, srai_w:
-                ImmType = `IMM_UI5;
-
-            lu12i_w, pcaddu12i, pcalau12i:
-                ImmType = `IMM_SI20_LSL12;
-
-            pcaddi:
-                ImmType = `IMM_SI20_LSL2;
-
-            ll_w, sc_w:
-                ImmType = `IMM_SI14_LSL2;
-
-            jirl,beq,bne,blt,bge,bltu,bgeu:
-                ImmType = `IMM_SI16_LSL2;
-            
-            beqz,bnez:
-                ImmType = `IMM_SI21_LSL2;
-
-            b,bl:
-                ImmType = `IMM_SI26_LSL2;
-
-            default:
-                ImmType = `IMM_NONE;
-        endcase
-    end
-
-endmodule
-
-module ImmGen(
-    input     [31:0] inst,
-    input     [3:0] ImmType,
-    output reg[31:0] imm32
-);
-    
-    wire [4:0]  ui5    = inst[14:10];
-    wire [11:0] imm12  = inst[21:10];
-    wire [13:0] imm14  = inst[23:10];
-    wire [15:0] imm16  = inst[25:10];
-    wire [19:0] imm20  = inst[24:5];
-    wire [20:0] offs21 = {inst[4:0], inst[25:10]};
-    wire [25:0] offs26 = {inst[9:0], inst[25:10]};
-    
-    always @(*) begin
-        case(ImmType)
-            `IMM_UI5:          imm32 = {27'b0, ui5};
-            `IMM_SI12:         imm32 = {{20{imm12[11]}}, imm12};
-            `IMM_UI12:         imm32 = {20'b0, imm12};
-            `IMM_SI14_LSL2:    imm32 = {{16{imm14[13]}}, imm14, 2'b00};
-            `IMM_SI16_LSL2:    imm32 = {{14{imm16[15]}}, imm16, 2'b00};
-            `IMM_SI20_LSL2:    imm32 = {{10{imm20[19]}}, imm20, 2'b00};
-            `IMM_SI20_LSL12:   imm32 = {imm20, 12'b0};
-            `IMM_SI21_LSL2:    imm32 = {{9{offs21[20]}}, offs21, 2'b00};
-            `IMM_SI26_LSL2:    imm32 = {{4{offs26[25]}}, offs26, 2'b00};
-            default:           imm32 = 32'd0;  
-        endcase
-    end 
-endmodule
-
-module EXU(
-    input         clk,
-    input         rst,
-
-    input  [31:0] pc,
-    input  [31:0] rdata1,
-    input  [31:0] rdata2,
-    input  [31:0] imm32,
-
-    input         flush,
-    input         ex_valid,
-    input         exmem_ready,
-
-    input  [31:0] fp_rdata1,
-    input  [31:0] fp_rdata2,
-
-    input  [3:0]  branch,
-
-    input         ALUSrc1,
-    input  [1:0]  ALUSrc2,
-    input  [2:0]  alsl_shift,
-
-    input  [1:0]  UnitSel,
-    input  [2:0]  MDUctr,
-    input  [3:0]  FPUctr,
-    input  [4:0]  ALUctr,
-
-    output        ex_busy,
-    output        ex_ready,
-    output        ex_res_valid,
-
-    output reg [31:0] ex_res,
-    output     [31:0] fp_to_gp_data,
-    output     [31:0] gp_to_fp_data,
-
-    output     [31:0] branch_target,
-    output            take_branch,
-    output            branch_valid,
-    output            branch_cond,
-    output            branch_jirl,
-
-    output            ex_exc_valid,
-    output      [5:0] ex_exc_ecode,
-    output reg  [8:0] ex_exc_esubcode
-);
-
-    reg [31:0] op_b;
-
-    wire [31:0] op_a = ALUSrc1 ? pc : rdata1;
-
-    wire [31:0] alu_res;
-    wire [31:0] mdu_res;
-    wire [31:0] fpu_res;
-
-    wire mdu_ready;
-    wire fpu_ready;
-    wire mdu_busy;
-    wire fpu_busy;
-
-    wire mdu_error_raw;
-
-    assign fp_to_gp_data = fp_rdata1;
-    assign gp_to_fp_data = rdata1;
-
-    always @(*) begin
-        case (ALUSrc2)
-            2'b00:   op_b = rdata2;
-            2'b01:   op_b = imm32;
-            2'b10:   op_b = 32'd4;
-            default: op_b = rdata2;
-        endcase
-    end
-
-    ALU u_alu(
-        .A(op_a),
-        .B(op_b),
-        .alsl_shift(alsl_shift),
-        .alu_op(ALUctr),
-        .alu_res(alu_res)
-    );
-
-    wire is_mdu_inst = ex_valid && (UnitSel == `MDU_use);
-    wire is_fpu_inst = ex_valid && (UnitSel == `FPU_use) && (FPUctr != `FP_movs);
-    wire is_multi    = is_mdu_inst || is_fpu_inst;
-
-    reg        multi_busy;
-    reg        multi_done_hold;
-    reg        multi_is_mdu;
-    reg        multi_is_fpu;
-    reg [31:0] multi_result_hold;
-    reg        multi_error_hold;
-
-    wire start_multi = ex_valid && is_multi && !multi_busy && !multi_done_hold;
-    wire mdu_start   = start_multi && is_mdu_inst;
-    wire fpu_start   = start_multi && is_fpu_inst;
-
-    assign ex_ready     = !ex_valid || !is_multi || multi_done_hold;
-    assign ex_busy      = ex_valid && is_multi && !multi_done_hold;
-    assign ex_res_valid = ex_valid && ex_ready;
-
-    wire result_accepted = ex_res_valid && exmem_ready;
-
-    FPU u_fpu(
-        .clk(clk),
-        .rst(rst),
-        .en(fpu_start),
-        .A(fp_rdata1),
-        .B(fp_rdata2),
-        .fpu_op(FPUctr),
-        .ready(fpu_ready),
-        .busy(fpu_busy),
-        .fpu_res(fpu_res)
-    );
-
-    MDU u_mdu(
-        .clk(clk),
-        .rst(rst),
-        .en(mdu_start),
-        .A(rdata1),
-        .B(rdata2),
-        .mdu_op(MDUctr),
-        .ready(mdu_ready),
-        .busy(mdu_busy),
-        .mdu_res(mdu_res),
-        .error(mdu_error_raw)
-    );
-
-    always @(posedge clk or negedge rst) begin
-        if (!rst || flush) begin
-            multi_busy        <= 1'b0;
-            multi_done_hold   <= 1'b0;
-            multi_is_mdu      <= 1'b0;
-            multi_is_fpu      <= 1'b0;
-            multi_result_hold <= 32'b0;
-            multi_error_hold  <= 1'b0;
-        end
-        else begin
-            if (start_multi) begin
-                multi_busy      <= 1'b1;
-                multi_done_hold <= 1'b0;
-                multi_is_mdu    <= is_mdu_inst;
-                multi_is_fpu    <= is_fpu_inst;
-                multi_error_hold<= 1'b0;
-            end
-
-            if (multi_busy && multi_is_mdu && mdu_ready) begin
-                multi_busy        <= 1'b0;
-                multi_done_hold   <= 1'b1;
-                multi_result_hold <= mdu_res;
-                multi_error_hold  <= mdu_error_raw;
-            end
-
-            if (multi_busy && multi_is_fpu && fpu_ready) begin
-                multi_busy        <= 1'b0;
-                multi_done_hold   <= 1'b1;
-                multi_result_hold <= fpu_res;
-            end
-
-            if (result_accepted) begin
-                multi_done_hold <= 1'b0;
-            end
-        end
-    end
-
-    always @(*) begin
-        case (UnitSel)
-            `MDU_use: begin
-                ex_res = multi_done_hold ? multi_result_hold : mdu_res;
-            end
-
-            `FPU_use: begin
-                if (FPUctr == `FP_movs)
-                    ex_res = fp_rdata1;
-                else
-                    ex_res = multi_done_hold ? multi_result_hold : fpu_res;
-            end
-
-            default: begin
-                ex_res = alu_res;
-            end
-        endcase
-    end
-
-    BRU u_bru(
-        .pc(pc),
-        .imm32(imm32),
-        .rdata1(rdata1),
-        .rdata2(rdata2),
-        .branch(branch),
-
-        .branch_target(branch_target),
-        .take_branch(take_branch),
-
-        .branch_valid(branch_valid),
-        .branch_cond(branch_cond),
-        .branch_jirl(branch_jirl)
-    );
-
-    wire ex_exc_md_valid = ex_valid && (UnitSel == `MDU_use) && multi_done_hold && multi_error_hold;
-
-    assign ex_exc_valid = ex_exc_md_valid;
-
-    assign ex_exc_ecode = ex_exc_valid ? `ECODE_FPE : 6'b0;
-
-    always @(*) begin
-        case(1'b1)
-            ex_exc_md_valid: ex_exc_esubcode = 9'd1;
-            default: ex_exc_esubcode = 9'd0;
-        endcase
-    end
-
-endmodule
-
-module BPU(
-    input             clk,
-    input             rst,
-
-    input      [31:0] if_pc,
-    input      [31:0] if_inst,
-
-    output reg        pred_taken,
-    output reg [31:0] pred_target,
-
-    input             update_valid,
-    input      [31:0] update_pc,
-    input             update_taken,
-    input      [31:0] update_target,
-    input             update_is_cond,
-    input             update_is_jirl
-    );
-
-    localparam INDEX_BITS = 8;
-    localparam ENTRY_NUM  = 256;
-    localparam TAG_WIDTH  = 32-INDEX_BITS-2;
-
-    wire [INDEX_BITS-1:0] if_idx = if_pc[INDEX_BITS+1:2];
-    wire [TAG_WIDTH-1 :0] if_tag = if_pc[31:INDEX_BITS+2];
-
-    wire [INDEX_BITS-1:0] upd_idx = update_pc[INDEX_BITS+1:2];
-    wire [TAG_WIDTH-1 :0] upd_tag = update_pc[31:INDEX_BITS+2];
-
-    reg  [1:0]            bht        [0:ENTRY_NUM-1];
-
-    reg                   btb_valid  [0:ENTRY_NUM-1];
-    reg  [TAG_WIDTH-1:0]  btb_tag    [0:ENTRY_NUM-1];
-    reg  [31:0]           btb_target [0:ENTRY_NUM-1];
-
-
-    wire beqz  = (if_inst[31:26] == 6'h10);
-    wire bnez  = (if_inst[31:26] == 6'h11);
-    wire jirl  = (if_inst[31:26] == 6'h13);
-    wire b     = (if_inst[31:26] == 6'h14);
-    wire bl    = (if_inst[31:26] == 6'h15);
-    wire beq   = (if_inst[31:26] == 6'h16);
-    wire bne   = (if_inst[31:26] == 6'h17);
-    wire blt   = (if_inst[31:26] == 6'h18);
-    wire bge   = (if_inst[31:26] == 6'h19);
-    wire bltu  = (if_inst[31:26] == 6'h1a);
-    wire bgeu  = (if_inst[31:26] == 6'h1b);
-
-    wire is_cond =  beqz | bnez |
-                    beq  | bne  |
-                    blt  | bge  |
-                    bltu | bgeu;
-    
-    wire is_uncond = b | bl;
-    wire is_jirl =  jirl;
-    wire is_branch = is_cond | is_uncond | is_jirl;
-
-    wire [15:0] imm16  = if_inst[25:10];
-    wire [20:0] offs21 = {if_inst[4:0], if_inst[25:10]};
-    wire [25:0] offs26 = {if_inst[9:0], if_inst[25:10]};
-
-    wire [31:0] target_16 = if_pc + {{14{imm16[15]}},  imm16,  2'b00};
-    wire [31:0] target_21 = if_pc + {{9{offs21[20]}}, offs21, 2'b00};
-    wire [31:0] target_26 = if_pc + {{4{offs26[25]}}, offs26, 2'b00};
-
-    wire btb_hit = btb_valid[if_idx] && (btb_tag[if_idx] == if_tag);
-
-    wire bht_taken = bht[if_idx][1];
-
-    always @(*) begin
-        if(is_uncond)    pred_taken = 1'b1;
-        else if(is_jirl) pred_taken = btb_hit;
-        else if(is_cond) pred_taken = bht_taken;
-        else             pred_taken = 1'b0;
-    end
-
-    always @(*) begin
-        if(is_uncond)               pred_target = target_26;
-        else if(beqz | bnez)        pred_target = target_21;
-        else if(is_cond)            pred_target = target_16;
-        else if(is_jirl && btb_hit) pred_target = btb_target[if_idx];
-        else                        pred_target = if_pc + 32'd4;
-    end
-
-    integer i;
-
-    always @(posedge clk or negedge rst) begin
-        if(!rst) begin
-            for(i = 0; i<ENTRY_NUM; i = i + 1) begin
-                bht[i]        <= 2'b01;
-                btb_valid[i]  <= 1'b0;
-                btb_tag[i]    <= {TAG_WIDTH{1'b0}};
-                btb_target[i] <= 32'b0;
-            end
-        end
-        else begin
-            if (update_valid && update_is_cond) begin
-                if (update_taken) begin
-                    if (bht[upd_idx] != 2'b11)
-                        bht[upd_idx] <= bht[upd_idx] + 2'b01;
-                end
-                else begin
-                    if (bht[upd_idx] != 2'b00)
-                        bht[upd_idx] <= bht[upd_idx] - 2'b01;
-                end
-            end
-            if (update_valid && update_is_jirl && update_taken) begin
-                btb_valid[upd_idx]  <= 1'b1;
-                btb_tag[upd_idx]    <= upd_tag;
-                btb_target[upd_idx] <= update_target;
-            end
-        end
-    end
-
-
-endmodule
-
-module HazardUnit(
-
-    //判断load_use
-    input            id_valid,
-    input      [4:0] id_rs1,
-    input      [4:0] id_rs2,
-    input            id_src1_used,
-    input            id_src2_used,
-
-    //id/ex寄存器内信息
-    input            ex_valid,
-    input      [4:0] ex_rs1,
-    input      [4:0] ex_rs2,
-    input            ex_src1_used,
-    input            ex_src2_used,
-
-    //ex处理后信息
-    input            ex_regWr,
-    input            ex_memRd,
-    input      [4:0] ex_waddr,
-
-    //ex/mem寄存器内信息
-    input            exmem_valid,
-    input            exmem_regWr,
-    input            exmem_memRd,
-    input      [4:0] exmem_regwaddr,
-
-    //mem/wb寄存器内信息
-    input            wb_valid,
-    input            wb_regWr,
-    input      [4:0] wb_waddr,
-
-    //输出
-    output           load_use_stall,
-    output reg [1:0] forwardA,
-    output reg [1:0] forwardB
-);
-    localparam FWD_NONE  = 2'd0;
-    localparam FWD_EXMEM = 2'd1;
-    localparam FWD_MEMWB = 2'd2;
-
-    assign load_use_stall = id_valid && ex_valid && ex_memRd && ex_regWr && (ex_waddr != 5'd0)
-                            && ((id_src1_used && (id_rs1 == ex_waddr)) || (id_src2_used && (id_rs2 == ex_waddr)));
-    
-    always @(*) begin
-        forwardA = FWD_NONE;
-
-        if(ex_valid && ex_src1_used && exmem_valid && exmem_regWr && !exmem_memRd && (exmem_regwaddr != 5'd0) && (exmem_regwaddr == ex_rs1)) begin
-            forwardA = FWD_EXMEM;
-        end
-        else if(ex_valid && ex_src1_used && wb_valid && wb_regWr && (wb_waddr != 5'd0) && (wb_waddr == ex_rs1)) begin
-            forwardA = FWD_MEMWB;
-        end
-    end
-
-    always @(*) begin
-        forwardB = FWD_NONE;
-
-        if(ex_valid && ex_src2_used && exmem_valid && exmem_regWr && !exmem_memRd && (exmem_regwaddr != 5'd0) && (exmem_regwaddr == ex_rs2)) begin
-            forwardB = FWD_EXMEM;
-        end
-        else if(ex_valid && ex_src2_used && wb_valid && wb_regWr && (wb_waddr != 5'd0) && (wb_waddr == ex_rs2)) begin
-            forwardB = FWD_MEMWB;
-        end
-    end
-
-endmodule
-
-module LSU(
-    input         clk,
-    input         rst,
-    input         flush,
-
-    input         mem_valid,
-    input         mem_en,
-    input         mem_wr,
-    input         mem_rd,
-    input  [1:0]  mem_size,      // 00 byte, 01 half, 10 word
-    input         mem_zero_ext,
-    input  [31:0] mem_addr,
-    input  [31:0] mem_wdata,
-
-    // MEM/WB是否已经接收LSU结果
-    input         result_taken,
-
-    // 给流水线的控制
-    output        mem_ready,
-    output        mem_stall,
-
-    // LSU输出给WB阶段的数据
-    output [31:0] load_data,
-    output        addr_err,
-    output        bus_err,
-
-    output        data_req_valid,
-    input         data_req_ready,
-    output        data_req_we,
-    output [31:0] data_req_vaddr,
-    output [31:0] data_req_wdata,
-    output [3:0]  data_req_wstrb,
-    output [1:0]  data_req_size,
-
-    input         data_resp_valid,
-    input  [31:0] data_resp_rdata,
-    input         data_resp_err
-);
-    
-    localparam MEM_BYTE = 2'd0;
-    localparam MEM_HALF = 2'd1;
-    localparam MEM_WORD = 2'd2;
-
-    wire byte_access = (mem_size == MEM_BYTE);
-    wire half_access = (mem_size == MEM_HALF);
-    wire word_access = (mem_size == MEM_WORD);
-
-    wire unalign_half = half_access && mem_addr[0];
-    wire unalign_word = word_access && (mem_addr[1:0] != 2'b00);
-
-    assign addr_err = mem_valid && mem_en && (unalign_half || unalign_word);
-
-    //写掩码
-    reg [3:0] wstrb;
-    always @(*) begin
-        case (mem_size)
-            MEM_BYTE: begin
-                case (mem_addr[1:0])
-                    2'b00:   wstrb = 4'b0001;
-                    2'b01:   wstrb = 4'b0010;
-                    2'b10:   wstrb = 4'b0100;
-                    2'b11:   wstrb = 4'b1000;
-                    default: wstrb = 4'b0000;
-                endcase
-            end
-
-            MEM_HALF: begin
-                case (mem_addr[1])
-                    1'b0:    wstrb = 4'b0011;
-                    1'b1:    wstrb = 4'b1100;
-                    default: wstrb = 4'b0000;
-                endcase
-            end
-
-            MEM_WORD: begin
-                wstrb = 4'b1111;
-            end
-
-            default: begin
-                wstrb = 4'b0000;
-            end
-        endcase
-    end
-
-    reg [31:0] store_wdata;
-    always @(*) begin
-        case (mem_size)
-            MEM_BYTE: begin
-                case (mem_addr[1:0])
-                    2'b00:   store_wdata = {24'b0, mem_wdata[7:0]};
-                    2'b01:   store_wdata = {16'b0, mem_wdata[7:0], 8'b0};
-                    2'b10:   store_wdata = {8'b0,  mem_wdata[7:0], 16'b0};
-                    2'b11:   store_wdata = {mem_wdata[7:0], 24'b0};
-                    default: store_wdata = 32'b0;
-                endcase
-            end
-
-            MEM_HALF: begin
-                case (mem_addr[1])
-                    1'b0:    store_wdata = {16'b0, mem_wdata[15:0]};
-                    1'b1:    store_wdata = {mem_wdata[15:0], 16'b0};
-                    default: store_wdata = 32'b0;
-                endcase
-            end
-
-            MEM_WORD: begin
-                store_wdata = mem_wdata;
-            end
-
-            default: begin
-                store_wdata = mem_wdata;
-            end
-        endcase
-    end
-
-    reg        req_pending;
-
-    reg [31:0] addr_hold;
-    reg [1:0]  size_hold;
-    reg        zero_ext_hold;
-    reg        rd_hold;
-    reg        wr_hold;
-
-    reg        done_valid;
-    reg [31:0] resp_data_hold;
-    reg        resp_err_hold;
-
-    wire need_req = mem_valid && mem_en && !addr_err;
-
-    assign data_req_valid = need_req && !req_pending && !done_valid;
-    assign data_req_we    = mem_wr;
-    assign data_req_vaddr = mem_addr;
-    assign data_req_wdata = store_wdata;
-    assign data_req_wstrb = mem_wr ? wstrb : 4'b0000;
-    assign data_req_size  = mem_size;
-
-    wire req_fire = data_req_valid && data_req_ready;
-
-    assign mem_ready = !mem_valid ||
-                       !mem_en    ||
-                       addr_err   ||
-                       done_valid;
-
-    assign mem_stall = mem_valid &&
-                       mem_en    &&
-                       !addr_err &&
-                       !done_valid;
-
-    always @(posedge clk or negedge rst) begin
-        if (!rst) begin
-            req_pending    <= 1'b0;
-
-            addr_hold      <= 32'b0;
-            size_hold      <= 2'b0;
-            zero_ext_hold  <= 1'b0;
-            rd_hold        <= 1'b0;
-            wr_hold        <= 1'b0;
-
-            done_valid     <= 1'b0;
-            resp_data_hold <= 32'b0;
-            resp_err_hold  <= 1'b0;
-        end
-        else if (flush) begin
-            req_pending    <= 1'b0;
-            done_valid     <= 1'b0;
-            resp_data_hold <= 32'b0;
-            resp_err_hold  <= 1'b0;
-        end
-        else begin
-            // MEM/WB 已经接收 LSU 结果，清掉 done_valid
-            if (result_taken) begin
-                done_valid <= 1'b0;
-            end
-
-            // 请求被总线接收
-            if (req_fire) begin
-                req_pending   <= 1'b1;
-
-                addr_hold     <= mem_addr;
-                size_hold     <= mem_size;
-                zero_ext_hold <= mem_zero_ext;
-                rd_hold       <= mem_rd;
-                wr_hold       <= mem_wr;
-            end
-
-            // 响应回来
-            if (data_resp_valid && req_pending) begin
-                req_pending    <= 1'b0;
-                done_valid     <= 1'b1;
-                resp_data_hold <= data_resp_rdata;
-                resp_err_hold  <= data_resp_err;
-            end
-        end
-    end
-
-    reg [7:0]  load_byte;
-    reg [15:0] load_half;
-    reg [31:0] load_result;
-
-    always @(*) begin
-        case (addr_hold[1:0])
-            2'b00:   load_byte = resp_data_hold[7:0];
-            2'b01:   load_byte = resp_data_hold[15:8];
-            2'b10:   load_byte = resp_data_hold[23:16];
-            2'b11:   load_byte = resp_data_hold[31:24];
-            default: load_byte = 8'b0;
-        endcase
-    end
-
-    always @(*) begin
-        case (addr_hold[1])
-            1'b0:    load_half = resp_data_hold[15:0];
-            1'b1:    load_half = resp_data_hold[31:16];
-            default: load_half = 16'b0;
-        endcase
-    end
-
-    always @(*) begin
-        case (size_hold)
-            MEM_BYTE: begin
-                if (zero_ext_hold)
-                    load_result = {24'b0, load_byte};
-                else
-                    load_result = {{24{load_byte[7]}}, load_byte};
-            end
-
-            MEM_HALF: begin
-                if (zero_ext_hold)
-                    load_result = {16'b0, load_half};
-                else
-                    load_result = {{16{load_half[15]}}, load_half};
-            end
-
-            MEM_WORD: begin
-                load_result = resp_data_hold;
-            end
-
-            default: begin
-                load_result = resp_data_hold;
-            end
-        endcase
-    end
-
-    assign load_data = load_result;
-
-    assign bus_err = done_valid && resp_err_hold;
-
-endmodule
-
-
-
-module CSRFile(
-    input clk,
-    input rst,
-
-    input[13:0] csr_raddr,
-    output reg[31:0] csr_rdata,
-
-    input         csr_we,
-    input  [13:0] csr_waddr,
-    input  [1 :0] csr_op,
-    input  [31:0] csr_wdata,
-    input  [31:0] csr_wmask,
-
-    input         exc_valid,
-    input  [31:0] exc_pc,
-    input  [5 :0] exc_ecode,
-    input  [8 :0] exc_esubcode,
-    input  [31:0] exc_badv,
-
-    input         ertn_valid,
-
-    //外部中断
-    input  [7:0]  hw_int,
-
-    output [31:0] csr_eentry,
-    output [31:0] csr_era,
-    output        has_int,
-
-    output [63:0] stable_timer
-);
-
-    reg [31:0] csr_crmd; //当前模式（是否开中断）
-    reg [31:0] csr_prmd; //中断前模式（）
-    reg [31:0] csr_ecfg; //中断屏蔽字
-    reg [31:0] csr_estat;//异常状态字
-    reg [31:0] csr_era_reg;//异常返回地址
-    reg [31:0] csr_badv; //发生异常的地址
-    reg [31:0] csr_eentry_reg;//异常处理程序入口地址
-
-    reg [31:0] csr_tid;//线程id
-    reg [31:0] csr_tcfg;//计时器配置（0位是使能，1位是是否循环，剩下的是具体数值）
-    reg [31:0] csr_tval;//定时器当前值，定时器开始是每拍递减，到0触发定时器中断
-    reg [31:0] csr_ticlr;//定时器中断清除寄存器
-    reg [31:0] csr_llbctl;//ll、sc控制寄存器
-
-    reg [63:0] timer_cnt;
-
-
-    assign stable_timer = timer_cnt;
-    assign csr_eentry   = csr_eentry_reg;
-    assign csr_era      = csr_era_reg;
-
-    // 简化：CRMD[2] 作为 IE，全局中断使能
-    // ECFG[12:0] 为局部中断使能
-    // ESTAT[12:0] 为中断 pending
-    assign has_int = csr_crmd[2] && (|(csr_estat[12:0] & csr_ecfg[12:0]));
-
-    wire timer_en       = csr_tcfg[0];
-    wire timer_periodic = csr_tcfg[1];
-    wire [29:0] tcfg_init = csr_tcfg[31:2];
-
-    always @(*) begin
-        case (csr_raddr)
-            `CSR_CRMD:   csr_rdata = csr_crmd;
-            `CSR_PRMD:   csr_rdata = csr_prmd;
-            `CSR_ECFG:   csr_rdata = csr_ecfg;
-            `CSR_ESTAT:  csr_rdata = csr_estat;
-            `CSR_ERA:    csr_rdata = csr_era_reg;
-            `CSR_BADV:   csr_rdata = csr_badv;
-            `CSR_EENTRY: csr_rdata = csr_eentry_reg;
-
-            `CSR_TID:    csr_rdata = csr_tid;
-            `CSR_TCFG:   csr_rdata = csr_tcfg;
-            `CSR_TVAL:   csr_rdata = csr_tval;
-            `CSR_TICLR:  csr_rdata = csr_ticlr;
-
-            `CSR_LLBCTL: csr_rdata = csr_llbctl;
-
-            default:     csr_rdata = 32'b0;
-        endcase
-    end
-
-    function [31:0] csr_write_value;
-        input [31:0] old_value;
-        input [1:0]  op;
-        input [31:0] wdata;
-        input [31:0] wmask;
-        begin
-            case (op)
-                `CSR_WR: begin
-                    csr_write_value = wdata;
-                end
-
-                `CSR_XCHG: begin
-                    csr_write_value = (old_value & ~wmask) | (wdata & wmask);
-                end
-
-                default: begin
-                    csr_write_value = old_value;
-                end
-            endcase
-        end
-    endfunction
-
-    wire[31:0] tval = csr_write_value(csr_tcfg, csr_op, csr_wdata, csr_wmask);
-
-    always @(posedge clk or negedge rst) begin
-        if (!rst) begin
-            csr_crmd       <= 32'd8;
-            csr_prmd       <= 32'b0;
-            csr_ecfg       <= 32'b0;
-            csr_estat      <= 32'b0;
-            csr_era_reg    <= 32'b0;
-            csr_badv       <= 32'b0;
-            csr_eentry_reg <= 32'h1C00_0100;
-
-            csr_tid        <= 32'b0;
-            csr_tcfg       <= 32'b0;
-            csr_tval       <= 32'hffff_ffff;
-            csr_ticlr      <= 32'b0;
-            csr_llbctl     <= 32'b0;
-
-            timer_cnt      <= 64'b0;
-        end
-        else begin
-            timer_cnt <= timer_cnt + 64'd1;
-
-            // 外部中断 pending，先映射到 ESTAT[9:2]
-            csr_estat[9:2] <= hw_int;
-
-            // timer
-            if (timer_en) begin
-                if (csr_tval == 32'b0) begin
-                    csr_estat[11] <= 1'b1;  // timer interrupt pending
-
-                    if (timer_periodic)
-                        csr_tval <= {tcfg_init, 2'b0};
-                    else
-                        csr_tcfg[0] <= 1'b0;
-                end
-                else begin
-                    csr_tval <= csr_tval - 32'd1;
-                end
-            end
-
-            // 异常进入，优先级最高
-            if (exc_valid) begin
-                // PRMD 保存旧 PLV / IE
-                csr_prmd[1:0] <= csr_crmd[1:0];
-                csr_prmd[2]   <= csr_crmd[2];
-
-                // 进入内核态，关闭中断
-                csr_crmd[1:0] <= 2'b00;
-                csr_crmd[2]   <= 1'b0;
-
-                csr_era_reg       <= exc_pc;
-                csr_badv          <= exc_badv;
-                csr_estat[21:16]  <= exc_ecode;
-                csr_estat[30:22]  <= exc_esubcode;
-            end
-            else if (ertn_valid) begin
-                csr_crmd[1:0] <= csr_prmd[1:0];
-                csr_crmd[2]   <= csr_prmd[2];
-            end
-            else if (csr_we) begin
-                case (csr_waddr)
-                    `CSR_CRMD:   csr_crmd       <= csr_write_value(csr_crmd,       csr_op, csr_wdata, csr_wmask);
-                    `CSR_PRMD:   csr_prmd       <= csr_write_value(csr_prmd,       csr_op, csr_wdata, csr_wmask);
-                    `CSR_ECFG:   csr_ecfg       <= csr_write_value(csr_ecfg,       csr_op, csr_wdata, csr_wmask);
-                    `CSR_ESTAT:  csr_estat      <= csr_write_value(csr_estat,csr_op,csr_wdata,csr_wmask);
-                    `CSR_ERA:    csr_era_reg    <= csr_write_value(csr_era_reg,    csr_op, csr_wdata, csr_wmask);
-                    `CSR_BADV:   csr_badv       <= csr_write_value(csr_badv,       csr_op, csr_wdata, csr_wmask);
-                    `CSR_EENTRY: csr_eentry_reg <= csr_write_value(csr_eentry_reg, csr_op, csr_wdata, csr_wmask);
-                    `CSR_TID:    csr_tid        <= csr_write_value(csr_tid,        csr_op, csr_wdata, csr_wmask);
-
-                    `CSR_TCFG: begin
-                        csr_tcfg <= csr_write_value(csr_tcfg, csr_op, csr_wdata, csr_wmask);
-                        csr_tval <= {tval[31:2], 2'b0};
-                    end
-
-                    `CSR_TICLR: begin
-                        if (csr_wdata[0])
-                            csr_estat[11] <= 1'b0;
-                    end
-
-                    `CSR_LLBCTL: begin
-                        csr_llbctl <= csr_write_value(csr_llbctl, csr_op, csr_wdata, csr_wmask);
-                    end
-
-                    default: begin
-                    end
-                endcase
-            end
-        end
-    end
-
-
-endmodule
-
 module CPU(
     input         clk,
     input         rst,
@@ -1546,12 +37,13 @@ module CPU(
     wire ex_stall;
     wire load_use_stall;
     wire csr_stall;
+    wire fp_load_use_stall;
 
 
     wire redirect_valid;
     wire [31:0] redirect_pc;
 
-    wire if_allowin = !mem_stall && !ex_stall && !load_use_stall && !csr_stall;
+    wire if_allowin = !mem_stall && !ex_stall && !load_use_stall && !csr_stall && !fp_load_use_stall;
     
     wire        if_valid;
     wire [31:0] if_pc;
@@ -1585,6 +77,7 @@ module CPU(
     wire [5:0]  exc_commit_ecode;
     wire [8:0]  exc_commit_esubcode;
     wire [31:0] exc_commit_badv;
+
 
     wire        ertn_commit;
     wire        mem_can_commit;
@@ -1831,7 +324,7 @@ module CPU(
             ifid_exc_esubcode<= 9'b0;
             ifid_exc_badv    <= 32'b0;
         end
-        else if (mem_stall || ex_stall || load_use_stall || csr_stall) begin
+        else if (mem_stall || ex_stall || load_use_stall || csr_stall || fp_load_use_stall) begin
             ifid_valid       <= ifid_valid;
             ifid_pc          <= ifid_pc;
             ifid_pc4         <= ifid_pc4;
@@ -1921,6 +414,8 @@ module CPU(
     wire [3:0]  id_WB_Sel;
     wire [1:0]  id_FPWB_Sel;
 
+    wire id_rdtime_tid_only;
+
     wire        id_issc;
     wire        id_isll;
 
@@ -1956,6 +451,7 @@ module CPU(
         .trap_sys(id_trap_sys),
         .trap_brk(id_trap_brk),
         .rdtime_inst(id_rdtime_inst),
+        .rdtime_tid_only(id_rdtime_tid_only),
 
         .csr_en(id_csr_en),
         .csr_we(id_csr_we),
@@ -1982,7 +478,7 @@ module CPU(
     wire csr_plv_is_user = 1'b0; 
     // 如果你暂时不做用户态，先写 0。
     // 后面可以从 CSRFile 输出 csr_crmd_plv。
-    assign csr_stall = ifid_valid && id_csr_en && ((idex_valid && idex_csr_we) || (exmem_valid && exmem_csr_we));
+    assign csr_stall = ifid_valid && (id_csr_en || id_rdtime_tid_only) && ((idex_valid && idex_csr_we) || (exmem_valid && exmem_csr_we));
 
     wire id_exc_ine = ifid_valid && !ifid_exc_valid && !id_inst_valid;
     wire id_exc_sys = ifid_valid && !ifid_exc_valid && id_trap_sys;
@@ -2043,7 +539,7 @@ module CPU(
 
     wire [4:0] id_rs1   = id_inst[9:5];
     wire [4:0] id_rs2   = id_RegDst ? id_inst[4:0] : id_inst[14:10];
-    wire [4:0] id_waddr = id_RegDst1 ? 5'd1 : id_inst[4:0];
+    wire [4:0] id_waddr = id_RegDst1 ? 5'd1 : id_rdtime_tid_only ? id_inst[9:5] : id_inst[4:0];
 
     wire [31:0] id_rdata1_raw;
     wire [31:0] id_rdata2_raw;
@@ -2092,6 +588,12 @@ module CPU(
         .test_data(fp_test_data_unused)
     );
 
+    wire [31:0] id_fp_rdata1 = (ifid_valid && id_FpSrc1Used && memwb_valid && memwb_FpRegWr && (memwb_fp_waddr == id_fp_rs1)) ? memwb_fp_wdata : id_fp_rdata1_raw;
+
+    wire [31:0] id_fp_rdata2 = (ifid_valid && id_FpSrc2Used && memwb_valid && memwb_FpRegWr && (memwb_fp_waddr == id_fp_rs2)) ? memwb_fp_wdata : id_fp_rdata2_raw;
+
+    assign fp_load_use_stall = ifid_valid && idex_valid && idex_MemRd && idex_FpRegWr && ((id_FpSrc1Used && (id_fp_rs1 == idex_fp_waddr)) ||(id_FpSrc2Used && (id_fp_rs2 == idex_fp_waddr)));
+
     wire [31:0] id_rdata1 =
         (ifid_valid && id_Src1Used &&
         memwb_valid && memwb_regWr &&
@@ -2123,6 +625,17 @@ module CPU(
             idex_isll      <= 1'b0;
             idex_issc      <= 1'b0;
             idex_rdtime_inst <= 1'b0;
+
+            idex_FpRegWr      <= 1'b0;
+            idex_FPWB_Sel     <= `FPWB_FPU;
+            idex_fp_rs1       <= 5'b0;
+            idex_fp_rs2       <= 5'b0;
+            idex_fp_waddr     <= 5'b0;
+            idex_fp_rdata1    <= 32'b0;
+            idex_fp_rdata2    <= 32'b0;
+            idex_FpSrc1Used   <= 1'b0;
+            idex_FpSrc2Used   <= 1'b0;
+            idex_MemSel       <= 1'b0;
         end
         else if(redirect_valid) begin
             idex_valid <= 1'b0;
@@ -2140,11 +653,16 @@ module CPU(
             idex_isll        <= 1'b0;
             idex_issc        <= 1'b0;
             idex_rdtime_inst <= 1'b0;
+
+            idex_FpRegWr    <= 1'b0;
+            idex_FpSrc1Used <= 1'b0;
+            idex_FpSrc2Used <= 1'b0;
+            idex_MemSel     <= 1'b0;
         end
         else if (mem_stall || ex_stall) begin
             idex_valid <= idex_valid;
         end
-        else if (load_use_stall || csr_stall) begin
+        else if (load_use_stall || fp_load_use_stall || csr_stall) begin
             idex_valid <= 1'b0;
             idex_regWr <= 1'b0;
             idex_MemWr <= 1'b0;
@@ -2160,6 +678,11 @@ module CPU(
             idex_isll        <= 1'b0;
             idex_issc        <= 1'b0;
             idex_rdtime_inst <= 1'b0;
+
+            idex_FpRegWr    <= 1'b0;
+            idex_FpSrc1Used <= 1'b0;
+            idex_FpSrc2Used <= 1'b0;
+            idex_MemSel     <= 1'b0;
         end
         else begin
             idex_valid      <= ifid_valid;
@@ -2218,8 +741,24 @@ module CPU(
             // rdtime
             idex_rdtime_inst  <= ifid_valid && id_rdtime_inst && !id_exc_valid;
             idex_rdtime_high  <= (id_inst[14:10] == 5'h19);
-            idex_timer_data   <= (id_inst[14:10] == 5'h19) ? stable_timer[63:32]
+            idex_timer_data   <= id_rdtime_tid_only ? csr_rdata : 
+                                (id_inst[14:10] == 5'h19) ? stable_timer[63:32]
                                                             : stable_timer[31:0];
+            
+            idex_FpRegWr    <= ifid_valid && id_FpRegWr && !id_exc_valid;
+            idex_FPWB_Sel   <= id_FPWB_Sel;
+
+            idex_fp_rs1     <= id_fp_rs1;
+            idex_fp_rs2     <= id_fp_rs2;
+            idex_fp_waddr   <= id_fp_waddr;
+
+            idex_fp_rdata1  <= id_fp_rdata1;
+            idex_fp_rdata2  <= id_fp_rdata2;
+
+            idex_FpSrc1Used <= id_FpSrc1Used;
+            idex_FpSrc2Used <= id_FpSrc2Used;
+
+            idex_MemSel     <= id_MemSel;
 
         end
     end
@@ -2295,15 +834,79 @@ module CPU(
     wire [31:0] ex_fp_to_gp_data;
     wire [31:0] ex_gp_to_fp_data;
 
-    // 目前没有 FPR 顶层的话，先临时接 0。
-    // 后面你要真的跑浮点，需要加 FPR 文件。
-    wire [31:0] ex_fp_rdata1 = 32'b0;
-    wire [31:0] ex_fp_rdata2 = 32'b0;
+    reg [31:0] exmem_fp_forward_data;
+
+    always @(*) begin
+        case(exmem_FPWB_Sel)
+            `FPWB_FPU: begin
+                exmem_fp_forward_data = exmem_ex_res;
+            end
+
+            `FPWB_GPR: begin
+                exmem_fp_forward_data = exmem_gp_to_fp_data;
+            end
+
+            // fld.s 不能从 EX/MEM 转发，必须等 MEM/WB
+            `FPWB_MEM: begin
+                exmem_fp_forward_data = 32'b0;
+            end
+
+            default: begin
+                exmem_fp_forward_data = exmem_ex_res;
+            end
+
+        endcase
+    end 
 
     wire        ex_stage_exc_valid;
     wire [5:0]  ex_stage_exc_ecode;
 
     wire exmem_ready = !mem_stall;
+
+    reg [31:0] ex_fp_data1;
+    reg [31:0] ex_fp_data2;
+
+    always @(*) begin
+        if (idex_valid &&
+            idex_FpSrc1Used &&
+            exmem_valid &&
+            exmem_FpRegWr &&
+            (exmem_FPWB_Sel != `FPWB_MEM) &&
+            (exmem_fp_waddr == idex_fp_rs1)) begin
+            ex_fp_data1 = exmem_fp_forward_data;
+        end
+        else if (idex_valid &&
+                idex_FpSrc1Used &&
+                memwb_valid &&
+                memwb_FpRegWr &&
+                (memwb_fp_waddr == idex_fp_rs1)) begin
+            ex_fp_data1 = memwb_fp_wdata;
+        end
+        else begin
+            ex_fp_data1 = idex_fp_rdata1;
+        end
+    end
+
+    always @(*) begin
+        if (idex_valid &&
+            idex_FpSrc2Used &&
+            exmem_valid &&
+            exmem_FpRegWr &&
+            (exmem_FPWB_Sel != `FPWB_MEM) &&
+            (exmem_fp_waddr == idex_fp_rs2)) begin
+            ex_fp_data2 = exmem_fp_forward_data;
+        end
+        else if (idex_valid &&
+                idex_FpSrc2Used &&
+                memwb_valid &&
+                memwb_FpRegWr &&
+                (memwb_fp_waddr == idex_fp_rs2)) begin
+            ex_fp_data2 = memwb_fp_wdata;
+        end
+        else begin
+            ex_fp_data2 = idex_fp_rdata2;
+        end
+    end
 
     EXU u_exu(
         .clk(clk),
@@ -2318,8 +921,8 @@ module CPU(
         .ex_valid(idex_valid),
         .exmem_ready(exmem_ready),
 
-        .fp_rdata1(ex_fp_rdata1),
-        .fp_rdata2(ex_fp_rdata2),
+        .fp_rdata1(ex_fp_data1),
+        .fp_rdata2(ex_fp_data2),
 
         .branch(idex_branch),
 
@@ -2429,13 +1032,13 @@ module CPU(
     assign bpu_update_is_jirl = ex_branch_jirl;
 
 
-    
+    wire [13:0] csr_actual_raddr = id_rdtime_tid_only ? `CSR_TID : id_csr_num;
 
     CSRFile u_csr(
         .clk(clk),
         .rst(rst),
 
-        .csr_raddr(id_csr_num),
+        .csr_raddr(csr_actual_raddr),
         .csr_rdata(csr_rdata),
 
         .csr_we(csr_commit_we),
@@ -2495,6 +1098,11 @@ module CPU(
             exmem_csr_wmask     <= 32'b0;
 
             exmem_timer_data    <= 32'b0;
+
+            exmem_FpRegWr       <= 1'b0;
+            exmem_FPWB_Sel      <= `FPWB_FPU;
+            exmem_fp_waddr      <= 5'b0;
+            exmem_gp_to_fp_data <= 32'b0;
         end
         else if (mem_stall) begin
             exmem_valid <= exmem_valid;
@@ -2511,13 +1119,19 @@ module CPU(
             exmem_MemZeroExt    <= exmem_MemZeroExt;
             exmem_WB_Sel        <= exmem_WB_Sel;
             exmem_fp_to_gp_data <= exmem_fp_to_gp_data;
+
+            exmem_FpRegWr       <= exmem_FpRegWr;
+            exmem_FPWB_Sel      <= exmem_FPWB_Sel;
+            exmem_fp_waddr      <= exmem_fp_waddr;
+            exmem_gp_to_fp_data <= exmem_gp_to_fp_data;
         end
         else if (ex_flush) begin
-            exmem_valid <= 1'b0;
-            exmem_regWr <= 1'b0;
-            exmem_MemWr <= 1'b0;
-            exmem_MemRd <= 1'b0;
-            exmem_MemEn <= 1'b0;
+            exmem_valid   <= 1'b0;
+            exmem_regWr   <= 1'b0;
+            exmem_MemWr   <= 1'b0;
+            exmem_MemRd   <= 1'b0;
+            exmem_MemEn   <= 1'b0;
+            exmem_FpRegWr <= 1'b0;
         end
         else if(ex_stall) begin
             exmem_valid         <= 1'b0;
@@ -2525,11 +1139,12 @@ module CPU(
             exmem_MemWr         <= 1'b0;
             exmem_MemRd         <= 1'b0;
             exmem_MemEn         <= 1'b0;
+            exmem_FpRegWr       <= 1'b0;
         end
         else begin
             exmem_valid      <= idex_valid && ex_res_valid;
             exmem_ex_res     <= ex_res;
-            exmem_store_data <= ex_data2;
+            exmem_store_data <= idex_MemSel ? ex_fp_data2 : ex_data2;
             exmem_pc         <= idex_pc;
             exmem_pc4        <= idex_pc4;
             exmem_regwaddr      <= idex_waddr;
@@ -2560,7 +1175,6 @@ module CPU(
 
             exmem_WB_Sel     <= idex_WB_Sel;
 
-            exmem_fp_to_gp_data <= ex_fp_to_gp_data;
 
             exmem_csr_en    <= idex_valid && ex_res_valid && idex_csr_en;
             exmem_csr_we    <= idex_valid &&
@@ -2597,6 +1211,18 @@ module CPU(
                                 !(idex_exc_valid || ex_stage_exc_valid);
 
             exmem_timer_data <= idex_timer_data;
+
+            exmem_FpRegWr <= idex_valid &&
+                 ex_res_valid &&
+                 idex_FpRegWr &&
+                 !(idex_exc_valid || ex_stage_exc_valid);
+
+            exmem_FPWB_Sel <= idex_FPWB_Sel;
+            exmem_fp_waddr <= idex_fp_waddr;
+
+            exmem_gp_to_fp_data <= ex_gp_to_fp_data;
+
+            exmem_fp_to_gp_data <= ex_fp_to_gp_data;
         end
     end
 
@@ -2768,6 +1394,31 @@ module CPU(
         endcase
     end
 
+    reg [31:0] fp_mem_stage_wdata;
+
+    always @(*) begin
+        case (exmem_FPWB_Sel)
+            `FPWB_MEM: begin
+                // fld.s
+                fp_mem_stage_wdata = lsu_load_data;
+            end
+
+            `FPWB_GPR: begin
+                // movgr2fr.w
+                fp_mem_stage_wdata = exmem_gp_to_fp_data;
+            end
+
+            `FPWB_FPU: begin
+                // fadd.s/fsub.s/fmul.s/fmov.s
+                fp_mem_stage_wdata = exmem_ex_res;
+            end
+
+            default: begin
+                fp_mem_stage_wdata = exmem_ex_res;
+            end
+        endcase
+    end
+
     always @(posedge clk or negedge rst) begin
         if (!rst) begin
             llbit  <= 1'b0;
@@ -2798,18 +1449,30 @@ module CPU(
             memwb_regWr <= 1'd0;
             memwb_waddr <= 5'd0;
             memwb_wdata <= 32'd0;
+
+            memwb_FpRegWr   <= 1'b0;
+            memwb_fp_waddr  <= 5'b0;
+            memwb_fp_wdata  <= 32'b0;
         end
         else if (mem_stall) begin
             memwb_valid <= 1'd0;
             memwb_regWr <= 1'd0;
             memwb_waddr <= 5'd0;
             memwb_wdata <= 32'd0;
+
+            memwb_FpRegWr   <= 1'b0;
+            memwb_fp_waddr  <= 5'b0;
+            memwb_fp_wdata  <= 32'b0;
         end
         else begin
             memwb_valid <= mem_can_commit;
             memwb_regWr <= mem_can_commit && exmem_regWr;
             memwb_waddr <= exmem_regwaddr;
             memwb_wdata <= mem_stage_wdata;
+
+            memwb_FpRegWr  <= mem_can_commit && exmem_FpRegWr;
+            memwb_fp_waddr <= exmem_fp_waddr;
+            memwb_fp_wdata <= fp_mem_stage_wdata;
         end
     end
 
