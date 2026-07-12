@@ -3,7 +3,7 @@
 module nand_controller #(
     parameter [24:0] BOOT_NAND_START_WORD = 25'd0,
     parameter [31:0] BOOT_LOAD_ADDR = 32'h1c00_0000,
-    parameter [31:0] BOOT_MAX_PAYLOAD_BYTES = 32'd129024
+    parameter [31:0] BOOT_MAX_PAYLOAD_BYTES = 32'd8386560
 ) (
     input wire clk,
     input wire rst_n,

@@ -3,7 +3,7 @@
 module soc_top #(
     parameter [24:0] BOOT_NAND_START_WORD = 25'd0,
     parameter [31:0] BOOT_LOAD_ADDR = 32'h1c00_0000,
-    parameter [31:0] BOOT_MAX_PAYLOAD_BYTES = 32'd129024
+    parameter [31:0] BOOT_MAX_PAYLOAD_BYTES = 32'd8386560
 ) (
     input  wire        sys_clk_i,
     input  wire        rst_n,
@@ -22,6 +22,18 @@ module soc_top #(
     output wire [1:0]  led_dual_g,
     output wire [7:0]  seg_csn,
     output wire [7:0]  seg,
+
+    output wire        lcd_rst,
+    output wire        lcd_cs,
+    output wire        lcd_rs,
+    output wire        lcd_wr,
+    output wire        lcd_rd,
+    inout  wire [15:0] lcd_data_io,
+    output wire        lcd_bl_ctr,
+    inout  wire        ct_int,
+    inout  wire        ct_sda,
+    output wire        ct_scl,
+    output wire        ct_rstn,
 
     inout  wire [7:0]  nand_d,
     output wire        nand_cle,
@@ -84,6 +96,10 @@ module soc_top #(
     wire [7:0] irq;
     wire nand_rdy_25;
     wire nand_wp_unused;
+    wire [4:0]  lcd_test_addr;
+    wire [31:0] lcd_test_data;
+    wire [31:0] lcd_test_pc_cur;
+    wire [31:0] lcd_test_inst;
 
     // clk_wiz_0 is the sole fabric clock source.  clk_out1 drives the shared
     // CPU/memory-control domain, clk_out2 supplies the 100 MHz MIG system
@@ -130,10 +146,10 @@ module soc_top #(
     CPU u_cpu (
         .clk(cpu_clk_25),
         .rst(cpu_rst_n),
-        .test_addr(5'd0),
-        .test_data(),
-        .test_pc_cur(),
-        .test_inst(),
+        .test_addr(lcd_test_addr),
+        .test_data(lcd_test_data),
+        .test_pc_cur(lcd_test_pc_cur),
+        .test_inst(lcd_test_inst),
         .inst_req_valid(inst_req_valid),
         .inst_req_ready(inst_req_ready),
         .inst_req_vaddr(inst_req_vaddr),
@@ -151,6 +167,26 @@ module soc_top #(
         .data_resp_rdata(data_resp_rdata),
         .data_resp_err(data_resp_err),
         .hw_int(irq)
+    );
+
+    lcd_cpu_display u_lcd_cpu_display (
+        .clk(cpu_clk_25),
+        .resetn(clk25_reset_n),
+        .lcd_rst(lcd_rst),
+        .lcd_cs(lcd_cs),
+        .lcd_rs(lcd_rs),
+        .lcd_wr(lcd_wr),
+        .lcd_rd(lcd_rd),
+        .lcd_data_io(lcd_data_io),
+        .lcd_bl_ctr(lcd_bl_ctr),
+        .ct_int(ct_int),
+        .ct_sda(ct_sda),
+        .ct_scl(ct_scl),
+        .ct_rstn(ct_rstn),
+        .test_addr(lcd_test_addr),
+        .test_data(lcd_test_data),
+        .test_pc_cur(lcd_test_pc_cur),
+        .test_inst(lcd_test_inst)
     );
 
     mem_subsystem #(

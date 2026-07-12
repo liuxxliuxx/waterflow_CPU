@@ -3,7 +3,7 @@
 module nand_boot_loader #(
     parameter [24:0] BOOT_NAND_START_WORD = 25'd0,
     parameter [31:0] BOOT_LOAD_ADDR = 32'h1c00_0000,
-    parameter [31:0] MAX_PAYLOAD_BYTES = 32'd129024,
+    parameter [31:0] MAX_PAYLOAD_BYTES = 32'd8386560,
     parameter [31:0] DDR_TIMEOUT_CYCLES = 32'd25_000_000
 ) (
     input wire clk,
