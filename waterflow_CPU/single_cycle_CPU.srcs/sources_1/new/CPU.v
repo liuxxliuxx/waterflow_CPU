@@ -37,12 +37,13 @@ module CPU(
     wire ex_stall;
     wire load_use_stall;
     wire csr_stall;
+    wire fp_load_use_stall;
 
 
     wire redirect_valid;
     wire [31:0] redirect_pc;
 
-    wire if_allowin = !mem_stall && !ex_stall && !load_use_stall && !csr_stall;
+    wire if_allowin = !mem_stall && !ex_stall && !load_use_stall && !csr_stall && !fp_load_use_stall;
     
     wire        if_valid;
     wire [31:0] if_pc;
@@ -322,7 +323,7 @@ module CPU(
             ifid_exc_esubcode<= 9'b0;
             ifid_exc_badv    <= 32'b0;
         end
-        else if (mem_stall || ex_stall || load_use_stall || csr_stall) begin
+        else if (mem_stall || ex_stall || load_use_stall || csr_stall || fp_load_use_stall) begin
             ifid_valid       <= ifid_valid;
             ifid_pc          <= ifid_pc;
             ifid_pc4         <= ifid_pc4;
@@ -583,6 +584,12 @@ module CPU(
         .test_data(fp_test_data_unused)
     );
 
+    wire [31:0] id_fp_rdata1 = (ifid_valid && id_FpSrc1Used && memwb_valid && memwb_FpRegWr && (memwb_fp_waddr == id_fp_rs1)) ? memwb_fp_wdata : id_fp_rdata1_raw;
+
+    wire [31:0] id_fp_rdata2 = (ifid_valid && id_FpSrc2Used && memwb_valid && memwb_FpRegWr && (memwb_fp_waddr == id_fp_rs2)) ? memwb_fp_wdata : id_fp_rdata2_raw;
+
+    assign fp_load_use_stall = ifid_valid && idex_valid && idex_MemRd && idex_FpRegWr && ((id_FpSrc1Used && (id_fp_rs1 == idex_fp_waddr)) ||(id_FpSrc2Used && (id_fp_rs2 == idex_fp_waddr)));
+
     wire [31:0] id_rdata1 =
         (ifid_valid && id_Src1Used &&
         memwb_valid && memwb_regWr &&
@@ -614,6 +621,17 @@ module CPU(
             idex_isll      <= 1'b0;
             idex_issc      <= 1'b0;
             idex_rdtime_inst <= 1'b0;
+
+            idex_FpRegWr      <= 1'b0;
+            idex_FPWB_Sel     <= `FPWB_FPU;
+            idex_fp_rs1       <= 5'b0;
+            idex_fp_rs2       <= 5'b0;
+            idex_fp_waddr     <= 5'b0;
+            idex_fp_rdata1    <= 32'b0;
+            idex_fp_rdata2    <= 32'b0;
+            idex_FpSrc1Used   <= 1'b0;
+            idex_FpSrc2Used   <= 1'b0;
+            idex_MemSel       <= 1'b0;
         end
         else if(redirect_valid) begin
             idex_valid <= 1'b0;
@@ -631,11 +649,16 @@ module CPU(
             idex_isll        <= 1'b0;
             idex_issc        <= 1'b0;
             idex_rdtime_inst <= 1'b0;
+
+            idex_FpRegWr    <= 1'b0;
+            idex_FpSrc1Used <= 1'b0;
+            idex_FpSrc2Used <= 1'b0;
+            idex_MemSel     <= 1'b0;
         end
         else if (mem_stall || ex_stall) begin
             idex_valid <= idex_valid;
         end
-        else if (load_use_stall || csr_stall) begin
+        else if (load_use_stall || fp_load_use_stall || csr_stall) begin
             idex_valid <= 1'b0;
             idex_regWr <= 1'b0;
             idex_MemWr <= 1'b0;
@@ -651,6 +674,11 @@ module CPU(
             idex_isll        <= 1'b0;
             idex_issc        <= 1'b0;
             idex_rdtime_inst <= 1'b0;
+
+            idex_FpRegWr    <= 1'b0;
+            idex_FpSrc1Used <= 1'b0;
+            idex_FpSrc2Used <= 1'b0;
+            idex_MemSel     <= 1'b0;
         end
         else begin
             idex_valid      <= ifid_valid;
@@ -711,6 +739,21 @@ module CPU(
             idex_rdtime_high  <= (id_inst[14:10] == 5'h19);
             idex_timer_data   <= (id_inst[14:10] == 5'h19) ? stable_timer[63:32]
                                                             : stable_timer[31:0];
+            
+            idex_FpRegWr    <= ifid_valid && id_FpRegWr && !id_exc_valid;
+            idex_FPWB_Sel   <= id_FPWB_Sel;
+
+            idex_fp_rs1     <= id_fp_rs1;
+            idex_fp_rs2     <= id_fp_rs2;
+            idex_fp_waddr   <= id_fp_waddr;
+
+            idex_fp_rdata1  <= id_fp_rdata1;
+            idex_fp_rdata2  <= id_fp_rdata2;
+
+            idex_FpSrc1Used <= id_FpSrc1Used;
+            idex_FpSrc2Used <= id_FpSrc2Used;
+
+            idex_MemSel     <= id_MemSel;
 
         end
     end
@@ -786,15 +829,79 @@ module CPU(
     wire [31:0] ex_fp_to_gp_data;
     wire [31:0] ex_gp_to_fp_data;
 
-    // 目前没有 FPR 顶层的话，先临时接 0。
-    // 后面你要真的跑浮点，需要加 FPR 文件。
-    wire [31:0] ex_fp_rdata1 = 32'b0;
-    wire [31:0] ex_fp_rdata2 = 32'b0;
+    reg [31:0] exmem_fp_forward_data;
+
+    always @(*) begin
+        case(exmem_FPWB_Sel)
+            `FPWB_FPU: begin
+                exmem_fp_forward_data = exmem_ex_res;
+            end
+
+            `FPWB_GPR: begin
+                exmem_fp_forward_data = exmem_gp_to_fp_data;
+            end
+
+            // fld.s 不能从 EX/MEM 转发，必须等 MEM/WB
+            `FPWB_MEM: begin
+                exmem_fp_forward_data = 32'b0;
+            end
+
+            default: begin
+                exmem_fp_forward_data = exmem_ex_res;
+            end
+
+        endcase
+    end 
 
     wire        ex_stage_exc_valid;
     wire [5:0]  ex_stage_exc_ecode;
 
     wire exmem_ready = !mem_stall;
+
+    reg [31:0] ex_fp_data1;
+    reg [31:0] ex_fp_data2;
+
+    always @(*) begin
+        if (idex_valid &&
+            idex_FpSrc1Used &&
+            exmem_valid &&
+            exmem_FpRegWr &&
+            (exmem_FPWB_Sel != `FPWB_MEM) &&
+            (exmem_fp_waddr == idex_fp_rs1)) begin
+            ex_fp_data1 = exmem_fp_forward_data;
+        end
+        else if (idex_valid &&
+                idex_FpSrc1Used &&
+                memwb_valid &&
+                memwb_FpRegWr &&
+                (memwb_fp_waddr == idex_fp_rs1)) begin
+            ex_fp_data1 = memwb_fp_wdata;
+        end
+        else begin
+            ex_fp_data1 = idex_fp_rdata1;
+        end
+    end
+
+    always @(*) begin
+        if (idex_valid &&
+            idex_FpSrc2Used &&
+            exmem_valid &&
+            exmem_FpRegWr &&
+            (exmem_FPWB_Sel != `FPWB_MEM) &&
+            (exmem_fp_waddr == idex_fp_rs2)) begin
+            ex_fp_data2 = exmem_fp_forward_data;
+        end
+        else if (idex_valid &&
+                idex_FpSrc2Used &&
+                memwb_valid &&
+                memwb_FpRegWr &&
+                (memwb_fp_waddr == idex_fp_rs2)) begin
+            ex_fp_data2 = memwb_fp_wdata;
+        end
+        else begin
+            ex_fp_data2 = idex_fp_rdata2;
+        end
+    end
 
     EXU u_exu(
         .clk(clk),
@@ -809,8 +916,8 @@ module CPU(
         .ex_valid(idex_valid),
         .exmem_ready(exmem_ready),
 
-        .fp_rdata1(ex_fp_rdata1),
-        .fp_rdata2(ex_fp_rdata2),
+        .fp_rdata1(ex_fp_data1),
+        .fp_rdata2(ex_fp_data2),
 
         .branch(idex_branch),
 
@@ -986,6 +1093,11 @@ module CPU(
             exmem_csr_wmask     <= 32'b0;
 
             exmem_timer_data    <= 32'b0;
+
+            exmem_FpRegWr       <= 1'b0;
+            exmem_FPWB_Sel      <= `FPWB_FPU;
+            exmem_fp_waddr      <= 5'b0;
+            exmem_gp_to_fp_data <= 32'b0;
         end
         else if (mem_stall) begin
             exmem_valid <= exmem_valid;
@@ -1002,13 +1114,19 @@ module CPU(
             exmem_MemZeroExt    <= exmem_MemZeroExt;
             exmem_WB_Sel        <= exmem_WB_Sel;
             exmem_fp_to_gp_data <= exmem_fp_to_gp_data;
+
+            exmem_FpRegWr       <= exmem_FpRegWr;
+            exmem_FPWB_Sel      <= exmem_FPWB_Sel;
+            exmem_fp_waddr      <= exmem_fp_waddr;
+            exmem_gp_to_fp_data <= exmem_gp_to_fp_data;
         end
         else if (ex_flush) begin
-            exmem_valid <= 1'b0;
-            exmem_regWr <= 1'b0;
-            exmem_MemWr <= 1'b0;
-            exmem_MemRd <= 1'b0;
-            exmem_MemEn <= 1'b0;
+            exmem_valid   <= 1'b0;
+            exmem_regWr   <= 1'b0;
+            exmem_MemWr   <= 1'b0;
+            exmem_MemRd   <= 1'b0;
+            exmem_MemEn   <= 1'b0;
+            exmem_FpRegWr <= 1'b0;
         end
         else if(ex_stall) begin
             exmem_valid         <= 1'b0;
@@ -1016,11 +1134,12 @@ module CPU(
             exmem_MemWr         <= 1'b0;
             exmem_MemRd         <= 1'b0;
             exmem_MemEn         <= 1'b0;
+            exmem_FpRegWr       <= 1'b0;
         end
         else begin
             exmem_valid      <= idex_valid && ex_res_valid;
             exmem_ex_res     <= ex_res;
-            exmem_store_data <= ex_data2;
+            exmem_store_data <= idex_MemSel ? ex_fp_data2 : ex_data2;
             exmem_pc         <= idex_pc;
             exmem_pc4        <= idex_pc4;
             exmem_regwaddr      <= idex_waddr;
@@ -1051,7 +1170,6 @@ module CPU(
 
             exmem_WB_Sel     <= idex_WB_Sel;
 
-            exmem_fp_to_gp_data <= ex_fp_to_gp_data;
 
             exmem_csr_en    <= idex_valid && ex_res_valid && idex_csr_en;
             exmem_csr_we    <= idex_valid &&
@@ -1088,6 +1206,18 @@ module CPU(
                                 !(idex_exc_valid || ex_stage_exc_valid);
 
             exmem_timer_data <= idex_timer_data;
+
+            exmem_FpRegWr <= idex_valid &&
+                 ex_res_valid &&
+                 idex_FpRegWr &&
+                 !(idex_exc_valid || ex_stage_exc_valid);
+
+            exmem_FPWB_Sel <= idex_FPWB_Sel;
+            exmem_fp_waddr <= idex_fp_waddr;
+
+            exmem_gp_to_fp_data <= ex_gp_to_fp_data;
+
+            exmem_fp_to_gp_data <= ex_fp_to_gp_data;
         end
     end
 
@@ -1259,6 +1389,31 @@ module CPU(
         endcase
     end
 
+    reg [31:0] fp_mem_stage_wdata;
+
+    always @(*) begin
+        case (exmem_FPWB_Sel)
+            `FPWB_MEM: begin
+                // fld.s
+                fp_mem_stage_wdata = lsu_load_data;
+            end
+
+            `FPWB_GPR: begin
+                // movgr2fr.w
+                fp_mem_stage_wdata = exmem_gp_to_fp_data;
+            end
+
+            `FPWB_FPU: begin
+                // fadd.s/fsub.s/fmul.s/fmov.s
+                fp_mem_stage_wdata = exmem_ex_res;
+            end
+
+            default: begin
+                fp_mem_stage_wdata = exmem_ex_res;
+            end
+        endcase
+    end
+
     always @(posedge clk or negedge rst) begin
         if (!rst) begin
             llbit  <= 1'b0;
@@ -1289,18 +1444,30 @@ module CPU(
             memwb_regWr <= 1'd0;
             memwb_waddr <= 5'd0;
             memwb_wdata <= 32'd0;
+
+            memwb_FpRegWr   <= 1'b0;
+            memwb_fp_waddr  <= 5'b0;
+            memwb_fp_wdata  <= 32'b0;
         end
         else if (mem_stall) begin
             memwb_valid <= 1'd0;
             memwb_regWr <= 1'd0;
             memwb_waddr <= 5'd0;
             memwb_wdata <= 32'd0;
+
+            memwb_FpRegWr   <= 1'b0;
+            memwb_fp_waddr  <= 5'b0;
+            memwb_fp_wdata  <= 32'b0;
         end
         else begin
             memwb_valid <= mem_can_commit;
             memwb_regWr <= mem_can_commit && exmem_regWr;
             memwb_waddr <= exmem_regwaddr;
             memwb_wdata <= mem_stage_wdata;
+
+            memwb_FpRegWr  <= mem_can_commit && exmem_FpRegWr;
+            memwb_fp_waddr <= exmem_fp_waddr;
+            memwb_fp_wdata <= fp_stage_wdata;
         end
     end
 
