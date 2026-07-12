@@ -104,6 +104,16 @@ module CSRFile(
     endfunction
 
     wire[31:0] tval = csr_write_value(csr_tcfg, csr_op, csr_wdata, csr_wmask);
+    wire[31:0] crmd = csr_write_value(csr_crmd, csr_op, csr_wdata, csr_wmask);
+    wire[31:0] prmd = csr_write_value(csr_prmd, csr_op, csr_wdata, csr_wmask);
+    wire[31:0] ecfg = csr_write_value(csr_ecfg, csr_op, csr_wdata, csr_wmask);
+    wire[31:0] estat = csr_write_value(csr_estat, csr_op, csr_wdata, csr_wmask);
+    wire[31:0] era_reg =csr_write_value(csr_era_reg, csr_op, csr_wdata, csr_wmask);
+    wire[31:0] badv=csr_write_value(csr_badv, csr_op, csr_wdata, csr_wmask);
+    wire[31:0] eentry=csr_write_value(csr_eentry_reg, csr_op, csr_wdata, csr_wmask);
+    wire[31:0] tid=csr_write_value(csr_tid, csr_op, csr_wdata, csr_wmask);
+    wire[31:0] tcfg=csr_write_value(csr_tcfg, csr_op, csr_wdata, csr_wmask);
+    wire[31:0] llbctl=csr_write_value(csr_llbctl, csr_op, csr_wdata, csr_wmask);
 
     always @(posedge clk or negedge rst) begin
         if (!rst) begin
@@ -165,17 +175,17 @@ module CSRFile(
             end
             else if (csr_we) begin
                 case (csr_waddr)
-                    `CSR_CRMD:   csr_crmd       <= csr_write_value(csr_crmd,       csr_op, csr_wdata, csr_wmask);
-                    `CSR_PRMD:   csr_prmd       <= csr_write_value(csr_prmd,       csr_op, csr_wdata, csr_wmask);
-                    `CSR_ECFG:   csr_ecfg       <= csr_write_value(csr_ecfg,       csr_op, csr_wdata, csr_wmask);
-                    `CSR_ESTAT:  csr_estat      <= csr_write_value(csr_estat,csr_op,csr_wdata,csr_wmask);
-                    `CSR_ERA:    csr_era_reg    <= csr_write_value(csr_era_reg,    csr_op, csr_wdata, csr_wmask);
-                    `CSR_BADV:   csr_badv       <= csr_write_value(csr_badv,       csr_op, csr_wdata, csr_wmask);
-                    `CSR_EENTRY: csr_eentry_reg <= csr_write_value(csr_eentry_reg, csr_op, csr_wdata, csr_wmask);
-                    `CSR_TID:    csr_tid        <= csr_write_value(csr_tid,        csr_op, csr_wdata, csr_wmask);
+                    `CSR_CRMD:   csr_crmd       <= {22'b0,crmd[9:0]};
+                    `CSR_PRMD:   csr_prmd       <= {28'b0,prmd[3:0]};
+                    `CSR_ECFG:   csr_ecfg       <= {19'b0,ecfg[12:11],1'b0,ecfg[9:0]};
+                    `CSR_ESTAT:  csr_estat      <= {1'b0,estat[30:16],3'b0,estat[12:11],1'b0,estat[9:0]};
+                    `CSR_ERA:    csr_era_reg    <= era_reg;
+                    `CSR_BADV:   csr_badv       <= badv;
+                    `CSR_EENTRY: csr_eentry_reg <= {eentry[31:6],6'b0};
+                    `CSR_TID:    csr_tid        <= tid;
 
                     `CSR_TCFG: begin
-                        csr_tcfg <= csr_write_value(csr_tcfg, csr_op, csr_wdata, csr_wmask);
+                        csr_tcfg <= tcfg;
                         csr_tval <= {tval[31:2], 2'b0};
                     end
 
@@ -185,7 +195,7 @@ module CSRFile(
                     end
 
                     `CSR_LLBCTL: begin
-                        csr_llbctl <= csr_write_value(csr_llbctl, csr_op, csr_wdata, csr_wmask);
+                        csr_llbctl <= {29'b0,llbctl[2:0]};
                     end
 
                     default: begin

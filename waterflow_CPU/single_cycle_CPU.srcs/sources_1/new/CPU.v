@@ -1467,7 +1467,7 @@ module CPU(
 
             memwb_FpRegWr  <= mem_can_commit && exmem_FpRegWr;
             memwb_fp_waddr <= exmem_fp_waddr;
-            memwb_fp_wdata <= fp_stage_wdata;
+            memwb_fp_wdata <= fp_mem_stage_wdata;
         end
     end
 
