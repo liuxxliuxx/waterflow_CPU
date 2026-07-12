@@ -108,6 +108,9 @@
 
 `define CSR_LLBCTL    14'h060
 
+`define CSR_DMW0      14'h180
+`define CSR_DMW1      14'h181
+
 
 `define IMM_NONE        4'd0
 `define IMM_SI12        4'd1

@@ -78,6 +78,7 @@ module CPU(
     wire [8:0]  exc_commit_esubcode;
     wire [31:0] exc_commit_badv;
 
+
     wire        ertn_commit;
     wire        mem_can_commit;
 
@@ -413,6 +414,8 @@ module CPU(
     wire [3:0]  id_WB_Sel;
     wire [1:0]  id_FPWB_Sel;
 
+    wire id_rdtime_tid_only;
+
     wire        id_issc;
     wire        id_isll;
 
@@ -448,6 +451,7 @@ module CPU(
         .trap_sys(id_trap_sys),
         .trap_brk(id_trap_brk),
         .rdtime_inst(id_rdtime_inst),
+        .rdtime_tid_only(id_rdtime_tid_only),
 
         .csr_en(id_csr_en),
         .csr_we(id_csr_we),
@@ -474,7 +478,7 @@ module CPU(
     wire csr_plv_is_user = 1'b0; 
     // 如果你暂时不做用户态，先写 0。
     // 后面可以从 CSRFile 输出 csr_crmd_plv。
-    assign csr_stall = ifid_valid && id_csr_en && ((idex_valid && idex_csr_we) || (exmem_valid && exmem_csr_we));
+    assign csr_stall = ifid_valid && (id_csr_en || id_rdtime_tid_only) && ((idex_valid && idex_csr_we) || (exmem_valid && exmem_csr_we));
 
     wire id_exc_ine = ifid_valid && !ifid_exc_valid && !id_inst_valid;
     wire id_exc_sys = ifid_valid && !ifid_exc_valid && id_trap_sys;
@@ -535,7 +539,7 @@ module CPU(
 
     wire [4:0] id_rs1   = id_inst[9:5];
     wire [4:0] id_rs2   = id_RegDst ? id_inst[4:0] : id_inst[14:10];
-    wire [4:0] id_waddr = id_RegDst1 ? 5'd1 : id_inst[4:0];
+    wire [4:0] id_waddr = id_RegDst1 ? 5'd1 : id_rdtime_tid_only ? id_inst[9:5] : id_inst[4:0];
 
     wire [31:0] id_rdata1_raw;
     wire [31:0] id_rdata2_raw;
@@ -737,7 +741,8 @@ module CPU(
             // rdtime
             idex_rdtime_inst  <= ifid_valid && id_rdtime_inst && !id_exc_valid;
             idex_rdtime_high  <= (id_inst[14:10] == 5'h19);
-            idex_timer_data   <= (id_inst[14:10] == 5'h19) ? stable_timer[63:32]
+            idex_timer_data   <= id_rdtime_tid_only ? csr_rdata : 
+                                (id_inst[14:10] == 5'h19) ? stable_timer[63:32]
                                                             : stable_timer[31:0];
             
             idex_FpRegWr    <= ifid_valid && id_FpRegWr && !id_exc_valid;
@@ -1027,13 +1032,13 @@ module CPU(
     assign bpu_update_is_jirl = ex_branch_jirl;
 
 
-    
+    wire [13:0] csr_actual_raddr = id_rdtime_tid_only ? `CSR_TID : id_csr_num;
 
     CSRFile u_csr(
         .clk(clk),
         .rst(rst),
 
-        .csr_raddr(id_csr_num),
+        .csr_raddr(csr_actual_raddr),
         .csr_rdata(csr_rdata),
 
         .csr_we(csr_commit_we),

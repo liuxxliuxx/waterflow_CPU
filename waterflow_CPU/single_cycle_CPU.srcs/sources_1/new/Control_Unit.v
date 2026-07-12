@@ -51,7 +51,9 @@ module Control_Unit(
     output reg[1:0]  FPWB_Sel,
 
     output           issc,
-    output           isll
+    output           isll,
+
+    output           rdtime_tid_only
     
     );
     
@@ -258,6 +260,8 @@ module Control_Unit(
     assign trap_sys  = syscall;
     assign trap_brk  = break_;
     assign rdtime_inst = rdtimel_w | rdtimeh_w;
+
+    assign rdtime_tid_only = rdtimel_w && (inst[4:0] == 5'd0);
 
     assign Src1Used = r_type
                     | addi_w | slti | sltui | andi | ori | xori

@@ -44,7 +44,11 @@ module CSRFile(
     reg [31:0] csr_ticlr;//定时器中断清除寄存器
     reg [31:0] csr_llbctl;//ll、sc控制寄存器
 
+    reg [31:0] csr_dmw0;
+    reg [31:0] csr_dmw1;
+
     reg [63:0] timer_cnt;
+
 
 
     assign stable_timer = timer_cnt;
@@ -76,6 +80,9 @@ module CSRFile(
             `CSR_TICLR:  csr_rdata = csr_ticlr;
 
             `CSR_LLBCTL: csr_rdata = csr_llbctl;
+
+            `CSR_DMW0:   csr_rdata = csr_dmw0;
+            `CSR_DMW1:   csr_rdata = csr_dmw1;
 
             default:     csr_rdata = 32'b0;
         endcase
@@ -114,6 +121,8 @@ module CSRFile(
     wire[31:0] tid=csr_write_value(csr_tid, csr_op, csr_wdata, csr_wmask);
     wire[31:0] tcfg=csr_write_value(csr_tcfg, csr_op, csr_wdata, csr_wmask);
     wire[31:0] llbctl=csr_write_value(csr_llbctl, csr_op, csr_wdata, csr_wmask);
+    wire[31:0] dmw0=csr_write_value(csr_dmw0, csr_op, csr_wdata, csr_wmask);
+    wire[31:0] dmw1=csr_write_value(csr_dmw1, csr_op, csr_wdata, csr_wmask);
 
     always @(posedge clk or negedge rst) begin
         if (!rst) begin
@@ -130,6 +139,8 @@ module CSRFile(
             csr_tval       <= 32'hffff_ffff;
             csr_ticlr      <= 32'b0;
             csr_llbctl     <= 32'b0;
+            csr_dmw0           <= 32'b0;
+            csr_dmw1           <= 32'b0;
 
             timer_cnt      <= 64'b0;
         end
@@ -165,7 +176,11 @@ module CSRFile(
                 csr_crmd[2]   <= 1'b0;
 
                 csr_era_reg       <= exc_pc;
-                csr_badv          <= exc_badv;
+                if ((exc_ecode == `ECODE_ADEF) ||
+                    (exc_ecode == `ECODE_ALE)  ||
+                    (exc_ecode == `ECODE_ADEM)) begin
+                    csr_badv <= exc_badv;
+                end
                 csr_estat[21:16]  <= exc_ecode;
                 csr_estat[30:22]  <= exc_esubcode;
             end
@@ -178,11 +193,13 @@ module CSRFile(
                     `CSR_CRMD:   csr_crmd       <= {22'b0,crmd[9:0]};
                     `CSR_PRMD:   csr_prmd       <= {28'b0,prmd[3:0]};
                     `CSR_ECFG:   csr_ecfg       <= {19'b0,ecfg[12:11],1'b0,ecfg[9:0]};
-                    `CSR_ESTAT:  csr_estat      <= {1'b0,estat[30:16],3'b0,estat[12:11],1'b0,estat[9:0]};
+                    `CSR_ESTAT:  csr_estat[1:0] <= estat[1:0];
                     `CSR_ERA:    csr_era_reg    <= era_reg;
                     `CSR_BADV:   csr_badv       <= badv;
                     `CSR_EENTRY: csr_eentry_reg <= {eentry[31:6],6'b0};
                     `CSR_TID:    csr_tid        <= tid;
+                    `CSR_DMW0: csr_dmw0 <= {dmw0[31:29],1'b0,dmw0[27:25],19'b0,dmw0[5:3],2'b0,dmw0[0]};
+                    `CSR_DMW1: csr_dmw1 <= {dmw1[31:29],1'b0,dmw1[27:25],19'b0,dmw1[5:3],2'b0,dmw1[0]};
 
                     `CSR_TCFG: begin
                         csr_tcfg <= tcfg;
