@@ -136,9 +136,10 @@ module mmio_tdm_bus #(
 
     reg vga_we;
     wire vga_busy;
-    reg [11:0] vga_addr;
-    reg [7:0] vga_wdata;
-    wire [7:0] vga_rdata;
+    reg [13:0] vga_addr;
+    reg [31:0] vga_wdata;
+    reg [3:0] vga_wstrb;
+    wire [31:0] vga_rdata;
 
     reg uart_send;
     wire uart_busy;
@@ -153,13 +154,14 @@ module mmio_tdm_bus #(
     wire dev_nand  = (req_addr[31:16] == 16'h1fd0);
     wire dev_led   = (req_addr[31:16] == 16'h1fe6);
     wire [15:0] req_offset = req_addr[15:0];
-    wire [11:0] vga_word_addr = req_addr[13:2];
+    wire [13:0] vga_word_addr = req_addr[15:2];
     wire ps2_addr_valid = (req_offset == 16'h0000) ||
                            (req_offset == 16'h0004) ||
                            (req_offset == 16'h0008);
-    wire vga_addr_valid = (req_addr[15:14] == 2'b00) &&
-                           ((vga_word_addr < 12'd2400) ||
-                            (vga_word_addr == 12'hfff));
+    wire vga_addr_valid = (vga_word_addr < 14'd2400) ||
+                          (vga_word_addr == 14'h0fff) ||
+                          ((vga_word_addr >= 14'h1000) &&
+                           (vga_word_addr <= 14'h1003));
     wire timer_addr_valid = (req_offset == 16'h0000);
     wire uart_addr_valid = (req_offset == 16'h0000);
     wire nand_addr_valid = (req_offset == 16'h0000) ||
@@ -208,6 +210,7 @@ module mmio_tdm_bus #(
         .cpu_we(vga_we),
         .cpu_addr(vga_addr),
         .cpu_wdata(vga_wdata),
+        .cpu_wstrb(vga_wstrb),
         .cpu_rdata(vga_rdata),
         .cpu_busy(vga_busy),
         .vga_r(vga_r),
@@ -275,8 +278,9 @@ module mmio_tdm_bus #(
             ps2_rd <= 1'b0;
             ps2_clear_errors <= 1'b0;
             vga_we <= 1'b0;
-            vga_addr <= 12'h0;
-            vga_wdata <= 8'h0;
+            vga_addr <= 14'h0;
+            vga_wdata <= 32'h0;
+            vga_wstrb <= 4'h0;
             vga_wait_req <= 1'b0;
             uart_send <= 1'b0;
             uart_data <= 8'h0;
@@ -342,10 +346,12 @@ module mmio_tdm_bus #(
                                 resp_valid <= 1'b1;
                             end else begin
                                 vga_addr <= vga_word_addr;
-                                vga_wdata <= req_wdata[7:0];
+                                vga_wdata <= req_wdata;
+                                vga_wstrb <= req_wstrb;
                                 vga_we <= req_we;
                                 vga_wait_req <= req_we &&
-                                                (vga_word_addr == 12'hfff);
+                                                ((vga_word_addr == 14'h0fff) ||
+                                                 (vga_word_addr == 14'h1003));
                                 state <= S_VGA_RESP;
                             end
                         end else if (dev_timer) begin
@@ -442,7 +448,7 @@ module mmio_tdm_bus #(
                     if (vga_wait_req) begin
                         state <= S_VGA_WAIT;
                     end else begin
-                        resp_rdata <= {24'h0, vga_rdata};
+                        resp_rdata <= vga_rdata;
                         resp_err <= 1'b0;
                         resp_valid <= 1'b1;
                         state <= S_IDLE;
@@ -452,7 +458,7 @@ module mmio_tdm_bus #(
                 S_VGA_WAIT: begin
                     if (!vga_busy) begin
                         vga_wait_req <= 1'b0;
-                        resp_rdata <= {24'h0, vga_rdata};
+                        resp_rdata <= vga_rdata;
                         resp_err <= 1'b0;
                         resp_valid <= 1'b1;
                         state <= S_IDLE;

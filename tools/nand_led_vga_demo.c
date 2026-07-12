@@ -6,7 +6,7 @@ int main(void)
     led_write(0xcau);
 
     vga_clear();
-    vga_puts_xy(0u, 0u, "helloworld");
+    vga_puts_xy(0u, 0u, "helloworld", VGA_COLOR_WHITE);
 
     for (;;) {
     }

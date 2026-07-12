@@ -1,281 +1,199 @@
 <mxfile host="Electron" agent="ChatGPT">
-  <diagram id="mem-separated" name="mem_subsystem结构图">
-    <mxGraphModel dx="2054" dy="1202" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1800" pageHeight="1050" math="0" shadow="0">
+  <diagram id="mem-subsystem-clean-v2" name="mem_subsystem结构图">
+    <mxGraphModel dx="2416" dy="1414" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2050" pageHeight="1100" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
-        <mxCell id="outer" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;strokeWidth=3;" value="" vertex="1">
-          <mxGeometry height="965" width="1290" x="260" y="55" as="geometry" />
+        <mxCell id="title" parent="1" style="text;html=1;whiteSpace=wrap;fillColor=none;align=center;verticalAlign=middle;fontFamily=Microsoft YaHei;" value="&lt;font style=&quot;font-size: 23px;&quot;&gt;&lt;b&gt;mem_subsystem&lt;/b&gt;&lt;/font&gt;" vertex="1">
+          <mxGeometry height="38" width="260" x="870" y="95" as="geometry" />
         </mxCell>
-        <mxCell id="title" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontFamily=Microsoft YaHei;fontSize=23;fontStyle=1;" value="mem_subsystem" vertex="1">
-          <mxGeometry height="40" width="220" x="800" y="70" as="geometry" />
+        <mxCell id="clk_rst" parent="1" style="shape=rhombus;perimeter=rhombusPerimeter;whiteSpace=wrap;html=1;fillColor=none;strokeWidth=2;fontSize=13;fontFamily=Comic Sans MS;align=center;verticalAlign=middle;spacing=0;" value="clk / rst" vertex="1">
+          <mxGeometry height="48" width="145" x="35" y="125" as="geometry" />
         </mxCell>
-        <mxCell id="in_i" parent="1" style="shape=rhombus;perimeter=rhombusPerimeter;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;strokeWidth=2;align=center;verticalAlign=middle;fontFamily=Microsoft YaHei;fontSize=12;spacing=0;" value="指令侧输入&lt;br&gt;i_req_valid&lt;br&gt;i_req_vaddr[31:0]&lt;br&gt;i_resp_ready" vertex="1">
-          <mxGeometry height="105" width="215" x="15" y="220" as="geometry" />
+        <mxCell id="i_cpu" parent="1" style="shape=rhombus;perimeter=rhombusPerimeter;whiteSpace=wrap;html=1;fillColor=none;strokeWidth=2;fontSize=13;fontFamily=Comic Sans MS;align=center;verticalAlign=middle;spacing=0;" value="CPU 指令接口&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;i_req_* / i_resp_ready&lt;br&gt;i_req_ready / i_resp_*&lt;/font&gt;" vertex="1">
+          <mxGeometry height="82" width="170" x="25" y="250" as="geometry" />
         </mxCell>
-        <mxCell id="in_d" parent="1" style="shape=rhombus;perimeter=rhombusPerimeter;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;strokeWidth=2;align=center;verticalAlign=middle;fontFamily=Microsoft YaHei;fontSize=12;spacing=0;" value="数据侧输入&lt;br&gt;d_req_valid / d_req_we&lt;br&gt;d_req_size[1:0] / d_req_wstrb[3:0]&lt;br&gt;d_req_vaddr[31:0] / d_req_wdata[31:0]&lt;br&gt;d_resp_ready" vertex="1">
-          <mxGeometry height="135" width="235" x="5" y="385" as="geometry" />
+        <mxCell id="d_cpu" parent="1" style="shape=rhombus;perimeter=rhombusPerimeter;whiteSpace=wrap;html=1;fillColor=none;strokeWidth=2;fontSize=13;fontFamily=Comic Sans MS;align=center;verticalAlign=middle;spacing=0;" value="CPU 数据接口&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;d_req_* / d_resp_ready&lt;br&gt;d_req_ready / d_resp_*&lt;/font&gt;" vertex="1">
+          <mxGeometry height="88" width="170" x="25" y="375" as="geometry" />
         </mxCell>
-        <mxCell id="in_periph" parent="1" style="shape=rhombus;perimeter=rhombusPerimeter;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;strokeWidth=2;align=center;verticalAlign=middle;fontFamily=Microsoft YaHei;fontSize=12;spacing=0;" value="外设输入&lt;br&gt;ps2_clk / ps2_dat / vga_clk&lt;br&gt;uart_rx / nand_rdy&lt;br&gt;nand_d[7:0]（读）" vertex="1">
-          <mxGeometry height="125" width="225" x="10" y="650" as="geometry" />
+        <mxCell id="i_resp" parent="1" style="shape=rhombus;perimeter=rhombusPerimeter;whiteSpace=wrap;html=1;fillColor=none;strokeWidth=2;fontSize=13;fontFamily=Comic Sans MS;align=center;verticalAlign=middle;spacing=0;" value="指令响应&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;i_resp_valid / inst / err&lt;/font&gt;" vertex="1">
+          <mxGeometry height="58" width="190" x="1720" y="85" as="geometry" />
         </mxCell>
-        <mxCell id="in_ddr" parent="1" style="shape=rhombus;perimeter=rhombusPerimeter;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;strokeWidth=2;align=center;verticalAlign=middle;fontFamily=Microsoft YaHei;fontSize=12;spacing=0;" value="DDR3输入&lt;br&gt;ddr_sys_clk_i&lt;br&gt;ddr3_dq / ddr3_dqs（读）" vertex="1">
-          <mxGeometry height="100" width="215" x="15" y="820" as="geometry" />
+        <mxCell id="d_resp" parent="1" style="shape=rhombus;perimeter=rhombusPerimeter;whiteSpace=wrap;html=1;fillColor=none;strokeWidth=2;fontSize=13;fontFamily=Comic Sans MS;align=center;verticalAlign=middle;spacing=0;" value="数据响应&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;d_resp_valid / rdata / err&lt;/font&gt;" vertex="1">
+          <mxGeometry height="58" width="190" x="1720" y="192" as="geometry" />
         </mxCell>
-        <mxCell id="out_ddr" parent="1" style="shape=rhombus;perimeter=rhombusPerimeter;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;strokeWidth=2;align=center;verticalAlign=middle;fontFamily=Microsoft YaHei;fontSize=12;spacing=0;" value="DDR3输出&lt;br&gt;ddr_ui_clk / ddr_ui_rst / init_calib_complete&lt;br&gt;addr / ba / ck / cke / ras / cas / we / reset&lt;br&gt;dq / dqs（写）/ dm / odt" vertex="1">
-          <mxGeometry height="170" width="230" x="1650" y="280" as="geometry" />
+        <mxCell id="exc_resp" parent="1" style="shape=rhombus;perimeter=rhombusPerimeter;whiteSpace=wrap;html=1;fillColor=none;strokeWidth=2;fontSize=13;fontFamily=Comic Sans MS;align=center;verticalAlign=middle;spacing=0;" value="resp_exc_valid" vertex="1">
+          <mxGeometry height="58" width="170" x="1730" y="262" as="geometry" />
         </mxCell>
-        <mxCell id="out_i" parent="1" style="shape=rhombus;perimeter=rhombusPerimeter;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;strokeWidth=2;align=center;verticalAlign=middle;fontFamily=Microsoft YaHei;fontSize=12;spacing=0;" value="指令侧输出&lt;br&gt;i_req_ready&lt;br&gt;i_resp_valid&lt;br&gt;i_resp_inst[31:0]" vertex="1">
-          <mxGeometry height="105" width="190" x="1635" y="462" as="geometry" />
+        <mxCell id="nand_if" parent="1" style="shape=rhombus;perimeter=rhombusPerimeter;whiteSpace=wrap;html=1;fillColor=none;strokeWidth=2;fontSize=13;fontFamily=Comic Sans MS;align=center;verticalAlign=middle;spacing=0;" value="NAND 接口&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;nand_d / 控制 / rdy&lt;/font&gt;" vertex="1">
+          <mxGeometry height="72" width="205" x="1777.5" y="360" as="geometry" />
         </mxCell>
-        <mxCell id="out_d" parent="1" style="shape=rhombus;perimeter=rhombusPerimeter;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;strokeWidth=2;align=center;verticalAlign=middle;fontFamily=Microsoft YaHei;fontSize=12;spacing=0;" value="数据侧输出&lt;br&gt;d_req_ready&lt;br&gt;d_resp_valid&lt;br&gt;d_resp_rdata[31:0]" vertex="1">
-          <mxGeometry height="105" width="190" x="1610" y="625" as="geometry" />
+        <mxCell id="mmio_in" parent="1" style="shape=rhombus;perimeter=rhombusPerimeter;whiteSpace=wrap;html=1;fillColor=none;strokeWidth=2;fontSize=13;fontFamily=Comic Sans MS;align=center;verticalAlign=middle;spacing=0;" value="外设输入&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;PS/2 / UART RX / VGA CLK&lt;br&gt;boot_ddr_ready&lt;/font&gt;" vertex="1">
+          <mxGeometry height="78" width="220" x="1770" y="450" as="geometry" />
         </mxCell>
-        <mxCell id="out_exc" parent="1" style="shape=rhombus;perimeter=rhombusPerimeter;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;strokeWidth=2;align=center;verticalAlign=middle;fontFamily=Microsoft YaHei;fontSize=12;spacing=0;" value="异常输出&lt;br&gt;resp_exc_valid" vertex="1">
-          <mxGeometry height="70" width="150" x="1635" y="755" as="geometry" />
+        <mxCell id="mmio_out" parent="1" style="shape=rhombus;perimeter=rhombusPerimeter;whiteSpace=wrap;html=1;fillColor=none;strokeWidth=2;fontSize=13;fontFamily=Comic Sans MS;align=center;verticalAlign=middle;spacing=0;" value="外设与启动输出&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;VGA / UART TX / irq&lt;br&gt;LED / SEG / boot_*&lt;/font&gt;" vertex="1">
+          <mxGeometry height="78" width="230" x="1765" y="550" as="geometry" />
         </mxCell>
-        <mxCell id="out_periph" parent="1" style="shape=rhombus;perimeter=rhombusPerimeter;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;strokeWidth=2;align=center;verticalAlign=middle;fontFamily=Microsoft YaHei;fontSize=12;spacing=0;" value="外设输出&lt;br&gt;vga_r/g/b / hsync / vsync&lt;br&gt;uart_tx / irq[7:0]&lt;br&gt;led_value / diag_value&lt;br&gt;NAND控制与 nand_d[7:0]（写）" vertex="1">
-          <mxGeometry height="180" width="282.5" x="1597.5" y="850" as="geometry" />
+        <mxCell id="ddr_sys" parent="1" style="shape=rhombus;perimeter=rhombusPerimeter;whiteSpace=wrap;html=1;fillColor=none;strokeWidth=2;fontSize=13;fontFamily=Comic Sans MS;align=center;verticalAlign=middle;spacing=0;" value="DDR 系统输入&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;ddr_sys_clk_i / ddr_rst_n&lt;/font&gt;" vertex="1">
+          <mxGeometry height="72" width="160" x="2065" y="640" as="geometry" />
         </mxCell>
-        <mxCell id="reqctrl" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;strokeWidth=2;align=center;verticalAlign=middle;fontFamily=Microsoft YaHei;fontSize=13;" value="&lt;b&gt;地址检查与请求分发&lt;/b&gt;&lt;br&gt;&lt;br&gt;is_mem_addr / is_mmio_addr&lt;br&gt;指令地址对齐检查&lt;br&gt;数据访问对齐检查&lt;br&gt;i_addr_exc / d_addr_exc&lt;br&gt;&lt;br&gt;生成 I-Cache、D-Cache、MMIO 请求&lt;br&gt;计算 i_req_ready / d_req_ready" vertex="1">
-          <mxGeometry height="430" width="250" x="320" y="255" as="geometry" />
+        <mxCell id="ddr_status" parent="1" style="shape=rhombus;perimeter=rhombusPerimeter;whiteSpace=wrap;html=1;fillColor=none;strokeWidth=2;fontSize=13;fontFamily=Comic Sans MS;align=center;verticalAlign=middle;spacing=0;" value="DDR 状态输出&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;ui_clk / ui_rst&lt;br&gt;init_calib_complete&lt;/font&gt;" vertex="1">
+          <mxGeometry height="82" width="170" x="2070" y="742" as="geometry" />
         </mxCell>
-        <mxCell id="icache" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;strokeWidth=2;align=center;verticalAlign=middle;fontFamily=Microsoft YaHei;fontSize=13;" value="&lt;b&gt;icache_blocking&lt;/b&gt;&lt;br&gt;&lt;br&gt;阻塞式指令 Cache&lt;br&gt;命中返回指令&lt;br&gt;Miss 产生 mem_req&lt;br&gt;接收 mem_resp" vertex="1">
-          <mxGeometry height="145" width="220" x="660" y="190" as="geometry" />
+        <mxCell id="ddr_phy" parent="1" style="shape=rhombus;perimeter=rhombusPerimeter;whiteSpace=wrap;html=1;fillColor=none;strokeWidth=2;fontSize=13;fontFamily=Comic Sans MS;align=center;verticalAlign=middle;spacing=0;" value="DDR3 物理接口&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;addr / ba / ck / dq / dqs&lt;br&gt;dm / odt / 控制信号&lt;/font&gt;" vertex="1">
+          <mxGeometry height="95" width="190" x="2070" y="835" as="geometry" />
         </mxCell>
-        <mxCell id="dcache" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;strokeWidth=2;align=center;verticalAlign=middle;fontFamily=Microsoft YaHei;fontSize=13;" value="&lt;b&gt;dcache_blocking&lt;/b&gt;&lt;br&gt;&lt;br&gt;阻塞式数据 Cache&lt;br&gt;处理读写、size、wstrb&lt;br&gt;Miss / 回写产生 mem_req&lt;br&gt;接收 mem_resp" vertex="1">
-          <mxGeometry height="165" width="220" x="660" y="410" as="geometry" />
-        </mxCell>
-        <mxCell id="mmio" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;strokeWidth=2;align=center;verticalAlign=middle;fontFamily=Microsoft YaHei;fontSize=13;" value="&lt;b&gt;mmio_tdm_bus&lt;/b&gt;&lt;br&gt;&lt;br&gt;MMIO 地址译码与访问&lt;br&gt;PS/2 / VGA / UART / IRQ&lt;br&gt;NAND / LED / 调试寄存器&lt;br&gt;返回 mmio_resp 与 resp_err" vertex="1">
-          <mxGeometry height="180" width="220" x="660" y="680" as="geometry" />
-        </mxCell>
-        <mxCell id="arb" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;strokeWidth=2;align=center;verticalAlign=middle;fontFamily=Microsoft YaHei;fontSize=13;" value="&lt;b&gt;Cache 访存仲裁&lt;/b&gt;&lt;br&gt;&lt;br&gt;D-Cache 请求优先&lt;br&gt;d_cache_mem_sel&lt;br&gt;i_cache_mem_sel&lt;br&gt;&lt;br&gt;保存响应来源&lt;br&gt;bridge_resp_is_i&lt;br&gt;bridge_resp_is_write" vertex="1">
-          <mxGeometry height="270" width="220" x="990" y="260" as="geometry" />
-        </mxCell>
-        <mxCell id="ddr" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;strokeWidth=2;align=center;verticalAlign=middle;fontFamily=Microsoft YaHei;fontSize=13;" value="&lt;b&gt;ddr3_mig_bridge&lt;/b&gt;&lt;br&gt;&lt;br&gt;CPU 请求/响应接口&lt;br&gt;DDR3 MIG 用户接口&lt;br&gt;完成地址、写掩码与数据转换" vertex="1">
-          <mxGeometry height="220" width="220" x="1280" y="285" as="geometry" />
-        </mxCell>
-        <mxCell id="0ctaP8WfSDXrIUNDqZLb-4" edge="1" parent="1" source="respctrl" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.25;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeWidth=2;" target="out_i">
+        <mxCell id="4ulVlyJyRskAiJkUPzVl-5" edge="1" parent="1" source="ctrl" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.25;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="i_resp">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="respctrl" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;strokeWidth=2;align=center;verticalAlign=middle;fontFamily=Microsoft YaHei;fontSize=13;" value="&lt;b&gt;响应寄存与异常合并&lt;/b&gt;&lt;br&gt;&lt;br&gt;接收 I-Cache / D-Cache / MMIO 响应&lt;br&gt;生成 i_resp_valid / i_resp_inst&lt;br&gt;生成 d_resp_valid / d_resp_rdata&lt;br&gt;保存 i_resp_exc / d_resp_exc&lt;br&gt;合并 resp_exc_valid" vertex="1">
-          <mxGeometry height="210" width="250" x="990" y="630" as="geometry" />
-        </mxCell>
-        <mxCell id="timer" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;strokeWidth=2;align=center;verticalAlign=middle;fontFamily=Microsoft YaHei;fontSize=13;" value="&lt;b&gt;32 位定时器&lt;/b&gt;&lt;br&gt;timer = timer + 1&lt;br&gt;向 MMIO 提供 timer_value" vertex="1">
-          <mxGeometry height="80" width="220" x="950" y="890" as="geometry" />
-        </mxCell>
-        <mxCell id="e_i_in" edge="1" parent="1" source="in_i" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=1.5;" target="reqctrl" value="">
-          <mxGeometry relative="1" as="geometry">
-            <Array as="points">
-              <mxPoint x="270" y="272" />
-              <mxPoint x="320" y="272" />
-            </Array>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="e_d_in" edge="1" parent="1" source="in_d" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=1.5;" target="reqctrl" value="">
-          <mxGeometry relative="1" as="geometry">
-            <Array as="points">
-              <mxPoint x="270" y="450" />
-              <mxPoint x="320" y="450" />
-            </Array>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="e_periph_in" edge="1" parent="1" source="in_periph" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=1.5;" target="mmio" value="">
-          <mxGeometry relative="1" as="geometry">
-            <Array as="points">
-              <mxPoint x="275" y="712" />
-              <mxPoint x="660" y="712" />
-            </Array>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="e_ddr_in" edge="1" parent="1" source="in_ddr" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=2;" target="ddr" value="">
-          <mxGeometry relative="1" as="geometry">
-            <Array as="points">
-              <mxPoint x="270" y="870" />
-              <mxPoint x="1520" y="870" />
-              <mxPoint x="1520" y="420" />
-              <mxPoint x="1500" y="420" />
-            </Array>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="e_req_i" edge="1" parent="1" source="reqctrl" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=1.5;" target="icache" value="">
-          <mxGeometry relative="1" as="geometry">
-            <Array as="points">
-              <mxPoint x="600" y="315" />
-              <mxPoint x="660" y="315" />
-            </Array>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="l_req_i" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontFamily=Microsoft YaHei;fontSize=10;" value="i_cache_req" vertex="1">
-          <mxGeometry height="22" width="90" x="585" y="286" as="geometry" />
-        </mxCell>
-        <mxCell id="e_req_d" edge="1" parent="1" source="reqctrl" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=1.5;" target="dcache" value="">
-          <mxGeometry relative="1" as="geometry">
-            <Array as="points">
-              <mxPoint x="610" y="490" />
-              <mxPoint x="660" y="490" />
-            </Array>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="l_req_d" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontFamily=Microsoft YaHei;fontSize=10;" value="d_cache_req" vertex="1">
-          <mxGeometry height="22" width="95" x="580" y="462" as="geometry" />
-        </mxCell>
-        <mxCell id="e_req_m" edge="1" parent="1" source="reqctrl" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=1.5;" target="mmio" value="">
-          <mxGeometry relative="1" as="geometry">
-            <Array as="points">
-              <mxPoint x="600" y="625" />
-              <mxPoint x="620" y="625" />
-              <mxPoint x="620" y="760" />
-              <mxPoint x="660" y="760" />
-            </Array>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="l_req_m" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontFamily=Microsoft YaHei;fontSize=10;" value="mmio_req" vertex="1">
-          <mxGeometry height="22" width="80" x="575" y="603" as="geometry" />
-        </mxCell>
-        <mxCell id="e_i_resp" edge="1" parent="1" source="icache" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=1.5;" target="respctrl" value="">
-          <mxGeometry relative="1" as="geometry">
-            <Array as="points">
-              <mxPoint x="900" y="260" />
-              <mxPoint x="900" y="735" />
-            </Array>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="l_i_resp" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontFamily=Microsoft YaHei;fontSize=10;" value="i_cache_resp" vertex="1">
-          <mxGeometry height="22" width="95" x="815" y="625" as="geometry" />
-        </mxCell>
-        <mxCell id="e_d_resp" edge="1" parent="1" source="dcache" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=1.5;entryX=0.002;entryY=0.379;entryDx=0;entryDy=0;entryPerimeter=0;" target="respctrl" value="">
-          <mxGeometry relative="1" as="geometry">
-            <Array as="points">
-              <mxPoint x="910" y="515" />
-              <mxPoint x="910" y="710" />
-              <mxPoint x="991" y="710" />
-            </Array>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="l_d_resp" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontFamily=Microsoft YaHei;fontSize=10;" value="d_cache_resp" vertex="1">
-          <mxGeometry height="22" width="98" x="896" y="685" as="geometry" />
-        </mxCell>
-        <mxCell id="e_m_resp" edge="1" parent="1" source="mmio" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=1.5;" target="respctrl" value="">
-          <mxGeometry relative="1" as="geometry">
-            <Array as="points">
-              <mxPoint x="915" y="785" />
-              <mxPoint x="960" y="785" />
-              <mxPoint x="960" y="770" />
-              <mxPoint x="990" y="770" />
-            </Array>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="l_m_resp" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontFamily=Microsoft YaHei;fontSize=10;" value="mmio_resp / err" vertex="1">
-          <mxGeometry height="22" width="105" x="885" y="750" as="geometry" />
-        </mxCell>
-        <mxCell id="e_ic_req" edge="1" parent="1" source="icache" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=1.5;" target="arb" value="">
-          <mxGeometry relative="1" as="geometry">
-            <Array as="points">
-              <mxPoint x="900" y="230" />
-              <mxPoint x="950" y="230" />
-              <mxPoint x="950" y="320" />
-              <mxPoint x="990" y="320" />
-            </Array>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="l_ic_req" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontFamily=Microsoft YaHei;fontSize=10;" value="I_mem_req" vertex="1">
-          <mxGeometry height="22" width="70" x="900" y="205" as="geometry" />
-        </mxCell>
-        <mxCell id="e_dc_req" edge="1" parent="1" source="dcache" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=1.5;" target="arb" value="">
-          <mxGeometry relative="1" as="geometry">
-            <Array as="points">
-              <mxPoint x="900" y="445" />
-              <mxPoint x="965" y="445" />
-              <mxPoint x="965" y="395" />
-              <mxPoint x="990" y="395" />
-            </Array>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="l_dc_req" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontFamily=Microsoft YaHei;fontSize=10;" value="D_mem_req" vertex="1">
-          <mxGeometry height="22" width="72" x="900" y="420" as="geometry" />
-        </mxCell>
-        <mxCell id="e_arb_ic_resp" edge="1" parent="1" source="arb" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=1.5;" target="icache" value="">
-          <mxGeometry relative="1" as="geometry">
-            <Array as="points">
-              <mxPoint x="970" y="350" />
-              <mxPoint x="935" y="350" />
-              <mxPoint x="935" y="300" />
-              <mxPoint x="880" y="300" />
-            </Array>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="l_arb_ic_resp" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontFamily=Microsoft YaHei;fontSize=10;" value="I_mem_resp" vertex="1">
-          <mxGeometry height="22" width="80" x="890" y="326" as="geometry" />
-        </mxCell>
-        <mxCell id="l_arb_dc_resp" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontFamily=Microsoft YaHei;fontSize=10;" value="D_mem_resp" vertex="1">
-          <mxGeometry height="22" width="70" x="910" y="459" as="geometry" />
-        </mxCell>
-        <mxCell id="e_arb_ddr_req" edge="1" parent="1" source="arb" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=1.5;" target="ddr" value="">
-          <mxGeometry relative="1" as="geometry">
-            <Array as="points">
-              <mxPoint x="1230" y="335" />
-              <mxPoint x="1280" y="335" />
-            </Array>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="l_arb_ddr_req" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontFamily=Microsoft YaHei;fontSize=10;" value="bridge_req" vertex="1">
-          <mxGeometry height="22" width="85" x="1210" y="305" as="geometry" />
-        </mxCell>
-        <mxCell id="e_ddr_arb_resp" edge="1" parent="1" source="ddr" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=1.5;" target="arb" value="">
-          <mxGeometry relative="1" as="geometry">
-            <Array as="points">
-              <mxPoint x="1260" y="455" />
-              <mxPoint x="1210" y="455" />
-            </Array>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="l_ddr_arb_resp" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontFamily=Microsoft YaHei;fontSize=10;" value="bridge_resp" vertex="1">
-          <mxGeometry height="22" width="88" x="1205" y="462" as="geometry" />
-        </mxCell>
-        <mxCell id="e_timer_mmio" edge="1" parent="1" source="timer" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=1.5;" target="mmio" value="">
-          <mxGeometry relative="1" as="geometry">
-            <Array as="points">
-              <mxPoint x="920" y="910" />
-              <mxPoint x="900" y="910" />
-              <mxPoint x="900" y="835" />
-              <mxPoint x="880" y="835" />
-            </Array>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="l_timer" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontFamily=Microsoft YaHei;fontSize=10;" value="timer_value" vertex="1">
-          <mxGeometry height="22" width="78" x="866" y="910" as="geometry" />
-        </mxCell>
-        <mxCell id="e_d_out" edge="1" parent="1" source="respctrl" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=1.5;" target="out_d" value="">
-          <mxGeometry relative="1" as="geometry">
-            <Array as="points">
-              <mxPoint x="1290" y="730" />
-              <mxPoint x="1540" y="730" />
-              <mxPoint x="1590" y="730" />
-            </Array>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="e_exc_out" edge="1" parent="1" source="respctrl" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=1.5;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="out_exc" value="">
-          <mxGeometry relative="1" as="geometry">
-            <Array as="points">
-              <mxPoint x="1560" y="800" />
-              <mxPoint x="1560" y="790" />
-            </Array>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="e_mmio_out" edge="1" parent="1" source="mmio" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=1.5;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="out_periph" value="">
-          <mxGeometry relative="1" as="geometry">
-            <Array as="points">
-              <mxPoint x="770" y="1000" />
-              <mxPoint x="1460" y="1000" />
-              <mxPoint x="1460" y="940" />
-            </Array>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="0ctaP8WfSDXrIUNDqZLb-2" edge="1" parent="1" source="ddr" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.25;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeWidth=2;" target="out_ddr">
+        <mxCell id="4ulVlyJyRskAiJkUPzVl-6" edge="1" parent="1" source="ctrl" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="d_resp">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="0ctaP8WfSDXrIUNDqZLb-3" edge="1" parent="1" source="arb" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0;exitY=0.75;exitDx=0;exitDy=0;entryX=1.003;entryY=0.319;entryDx=0;entryDy=0;entryPerimeter=0;" target="dcache">
+        <mxCell id="4ulVlyJyRskAiJkUPzVl-7" edge="1" parent="1" source="ctrl" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.75;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="exc_resp">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ctrl" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeWidth=3;align=center;verticalAlign=middle;fontFamily=Microsoft YaHei;" value="&lt;font style=&quot;font-size:17px&quot;&gt;&lt;b&gt;地址检查、请求分流与响应控制&lt;/b&gt;&lt;/font&gt;&lt;br&gt;&lt;br&gt;&lt;font style=&quot;font-size:12px&quot;&gt;地址范围 / MMIO 判断 / 对齐检查&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:12px&quot;&gt;i_resp_room / d_resp_room&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:12px&quot;&gt;请求 ready 与异常请求生成&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:12px&quot;&gt;i/d 响应寄存、异常汇总、timer&lt;/font&gt;" vertex="1">
+          <mxGeometry height="180" width="900" x="420" y="150" as="geometry" />
+        </mxCell>
+        <mxCell id="icache" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeWidth=3;align=center;verticalAlign=middle;fontFamily=Microsoft YaHei;" value="&lt;font style=&quot;font-size:17px&quot; face=&quot;Comic Sans MS&quot;&gt;&lt;b&gt;icache_blocking&lt;/b&gt;&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:14px&quot;&gt;指令 Cache&lt;/font&gt;&lt;br&gt;&lt;br&gt;&lt;font style=&quot;font-size:12px&quot;&gt;CPU 请求 / 指令响应&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:12px&quot;&gt;DDR 读请求 / 返回数据&lt;/font&gt;" vertex="1">
+          <mxGeometry height="155" width="235" x="450" y="405" as="geometry" />
+        </mxCell>
+        <mxCell id="dcache" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeWidth=3;align=center;verticalAlign=middle;fontFamily=Microsoft YaHei;" value="&lt;font style=&quot;font-size:17px&quot; face=&quot;Comic Sans MS&quot;&gt;&lt;b&gt;dcache_blocking&lt;/b&gt;&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:14px&quot;&gt;数据 Cache&lt;/font&gt;&lt;br&gt;&lt;br&gt;&lt;font style=&quot;font-size:12px&quot;&gt;读写请求 / 数据响应&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:12px&quot;&gt;DDR 读写请求 / 返回数据&lt;/font&gt;" vertex="1">
+          <mxGeometry height="155" width="245" x="760" y="405" as="geometry" />
+        </mxCell>
+        <mxCell id="4ulVlyJyRskAiJkUPzVl-1" edge="1" parent="1" source="mmio" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.25;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="nand_if">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="4ulVlyJyRskAiJkUPzVl-2" edge="1" parent="1" source="mmio" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;" target="mmio_in">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="4ulVlyJyRskAiJkUPzVl-3" edge="1" parent="1" source="mmio" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.75;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="mmio_out">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="mmio" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeWidth=3;align=center;verticalAlign=middle;fontFamily=Microsoft YaHei;" value="&lt;font style=&quot;font-size:17px&quot; face=&quot;Comic Sans MS&quot;&gt;&lt;b&gt;mmio_tdm_bus&lt;/b&gt;&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:14px&quot;&gt;MMIO 与启动加载&lt;/font&gt;&lt;br&gt;&lt;br&gt;&lt;font style=&quot;font-size:12px&quot;&gt;PS/2 / VGA / UART&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:12px&quot;&gt;NAND / IRQ / LED / 数码管&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:12px&quot;&gt;boot DDR 请求与状态&lt;/font&gt;" vertex="1">
+          <mxGeometry height="175" width="260" x="1080" y="395" as="geometry" />
+        </mxCell>
+        <mxCell id="arb" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeWidth=3;align=center;verticalAlign=middle;fontFamily=Microsoft YaHei;" value="&lt;font style=&quot;font-size:17px&quot;&gt;&lt;b&gt;DDR 仲裁与返回路由&lt;/b&gt;&lt;/font&gt;&lt;br&gt;&lt;br&gt;&lt;font style=&quot;font-size:12px&quot;&gt;优先级：Boot → D-Cache → I-Cache&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:12px&quot;&gt;请求选择：we / wstrb / addr / wdata&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:12px&quot;&gt;返回标记：is_i / is_boot / is_write&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:12px&quot;&gt;分发 ready / response&lt;/font&gt;" vertex="1">
+          <mxGeometry height="160" width="890" x="420" y="690" as="geometry" />
+        </mxCell>
+        <mxCell id="cdc" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeWidth=3;align=center;verticalAlign=middle;fontFamily=Microsoft YaHei;" value="&lt;font style=&quot;font-size:17px&quot; face=&quot;Comic Sans MS&quot;&gt;&lt;b&gt;ddr_cdc_bridge&lt;/b&gt;&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:14px&quot;&gt;跨时钟域桥接&lt;/font&gt;&lt;br&gt;&lt;br&gt;&lt;font style=&quot;font-size:12px&quot;&gt;clk 域 ↔ ddr_ui_clk 域&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:12px&quot;&gt;请求 / 响应握手&lt;/font&gt;" vertex="1">
+          <mxGeometry height="160" width="190" x="1390" y="690" as="geometry" />
+        </mxCell>
+        <mxCell id="mig" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeWidth=3;align=center;verticalAlign=middle;fontFamily=Microsoft YaHei;" value="&lt;font style=&quot;font-size:17px&quot; face=&quot;Comic Sans MS&quot;&gt;&lt;b&gt;ddr3_mig_bridge&lt;/b&gt;&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:14px&quot;&gt;DDR3 控制桥&lt;/font&gt;&lt;br&gt;&lt;br&gt;&lt;font style=&quot;font-size:12px&quot;&gt;MIG 应用端口&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:12px&quot;&gt;DDR3 物理接口&lt;/font&gt;" vertex="1">
+          <mxGeometry height="160" width="160" x="1680" y="690" as="geometry" />
+        </mxCell>
+        <mxCell id="e_clk_ctrl" edge="1" parent="1" source="clk_rst" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;exitX=1;exitY=0.5;entryX=0;entryY=0.14;fillColor=none;" target="ctrl" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_i_cpu" edge="1" parent="1" source="i_cpu" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;exitX=1;exitY=0.5;entryX=0;entryY=0.50;fillColor=none;" target="ctrl" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_d_cpu" edge="1" parent="1" source="d_cpu" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;exitX=1;exitY=0.5;entryX=0;entryY=0.82;fillColor=none;" target="ctrl" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_ctrl_icache_req" edge="1" parent="1" source="ctrl" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;exitX=0.135;exitY=1;entryX=0.42;entryY=0;fillColor=none;" target="icache" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_icache_ctrl_rsp" edge="1" parent="1" source="icache" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;exitX=0.58;exitY=0;entryX=0.185;entryY=1;fillColor=none;" target="ctrl" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_ctrl_dcache_req" edge="1" parent="1" source="ctrl" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;exitX=0.485;exitY=1;entryX=0.42;entryY=0;fillColor=none;" target="dcache" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_dcache_ctrl_rsp" edge="1" parent="1" source="dcache" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;exitX=0.58;exitY=0;entryX=0.535;entryY=1;fillColor=none;" target="ctrl" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_ctrl_mmio_req" edge="1" parent="1" source="ctrl" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;exitX=0.835;exitY=1;entryX=0.42;entryY=0;fillColor=none;" target="mmio" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_mmio_ctrl_rsp" edge="1" parent="1" source="mmio" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;exitX=0.58;exitY=0;entryX=0.885;entryY=1;fillColor=none;" target="ctrl" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="lab_i_req" parent="1" style="text;html=1;whiteSpace=wrap;fillColor=none;align=center;verticalAlign=middle;fontSize=11;fontFamily=Comic Sans MS;" value="i_cache_req_*" vertex="1">
+          <mxGeometry height="20" width="110" x="440" y="345" as="geometry" />
+        </mxCell>
+        <mxCell id="lab_i_rsp" parent="1" style="text;html=1;whiteSpace=wrap;fillColor=none;align=center;verticalAlign=middle;fontSize=11;fontFamily=Comic Sans MS;" value="i_cache_resp_*" vertex="1">
+          <mxGeometry height="20" width="115" x="585" y="370" as="geometry" />
+        </mxCell>
+        <mxCell id="lab_d_req" parent="1" style="text;html=1;whiteSpace=wrap;fillColor=none;align=center;verticalAlign=middle;fontSize=11;fontFamily=Comic Sans MS;" value="d_cache_req_*" vertex="1">
+          <mxGeometry height="20" width="115" x="750" y="345" as="geometry" />
+        </mxCell>
+        <mxCell id="lab_d_rsp" parent="1" style="text;html=1;whiteSpace=wrap;fillColor=none;align=center;verticalAlign=middle;fontSize=11;fontFamily=Comic Sans MS;" value="d_cache_resp_*" vertex="1">
+          <mxGeometry height="20" width="120" x="895" y="370" as="geometry" />
+        </mxCell>
+        <mxCell id="lab_m_req" parent="1" style="text;html=1;whiteSpace=wrap;fillColor=none;align=center;verticalAlign=middle;fontSize=11;fontFamily=Comic Sans MS;" value="mmio_req_*" vertex="1">
+          <mxGeometry height="20" width="100" x="1080" y="345" as="geometry" />
+        </mxCell>
+        <mxCell id="lab_m_rsp" parent="1" style="text;html=1;whiteSpace=wrap;fillColor=none;align=center;verticalAlign=middle;fontSize=11;fontFamily=Comic Sans MS;" value="mmio_resp_*" vertex="1">
+          <mxGeometry height="20" width="105" x="1215" y="370" as="geometry" />
+        </mxCell>
+        <mxCell id="e_icache_arb_req" edge="1" parent="1" source="icache" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;exitX=0.42;exitY=1;entryX=0.11;entryY=0;fillColor=none;" target="arb" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_arb_icache_rsp" edge="1" parent="1" source="arb" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;exitX=0.15;exitY=0;entryX=0.58;entryY=1;fillColor=none;" target="icache" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_dcache_arb_req" edge="1" parent="1" source="dcache" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;exitX=0.42;exitY=1;entryX=0.48;entryY=0;fillColor=none;" target="arb" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_arb_dcache_rsp" edge="1" parent="1" source="arb" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;exitX=0.52;exitY=0;entryX=0.58;entryY=1;fillColor=none;" target="dcache" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_mmio_arb_req" edge="1" parent="1" source="mmio" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;exitX=0.42;exitY=1;entryX=0.85;entryY=0;fillColor=none;" target="arb" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_arb_mmio_rsp" edge="1" parent="1" source="arb" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;exitX=0.89;exitY=0;entryX=0.58;entryY=1;fillColor=none;" target="mmio" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="lab_imem_req" parent="1" style="text;html=1;whiteSpace=wrap;fillColor=none;align=center;verticalAlign=middle;fontSize=11;fontFamily=Comic Sans MS;" value="i_cache_mem_req_*" vertex="1">
+          <mxGeometry height="20" width="125" x="390" y="625" as="geometry" />
+        </mxCell>
+        <mxCell id="lab_imem_rsp" parent="1" style="text;html=1;whiteSpace=wrap;fillColor=none;align=center;verticalAlign=middle;fontSize=11;fontFamily=Comic Sans MS;" value="i_cache_mem_resp_*" vertex="1">
+          <mxGeometry height="20" width="130" x="580" y="635" as="geometry" />
+        </mxCell>
+        <mxCell id="lab_dmem_req" parent="1" style="text;html=1;whiteSpace=wrap;fillColor=none;align=center;verticalAlign=middle;fontSize=11;fontFamily=Comic Sans MS;" value="d_cache_mem_req_*" vertex="1">
+          <mxGeometry height="20" width="130" x="735" y="605" as="geometry" />
+        </mxCell>
+        <mxCell id="lab_dmem_rsp" parent="1" style="text;html=1;whiteSpace=wrap;fillColor=none;align=center;verticalAlign=middle;fontSize=11;fontFamily=Comic Sans MS;" value="d_cache_mem_resp_*" vertex="1">
+          <mxGeometry height="20" width="135" x="920" y="635" as="geometry" />
+        </mxCell>
+        <mxCell id="lab_boot_req" parent="1" style="text;html=1;whiteSpace=wrap;fillColor=none;align=center;verticalAlign=middle;fontSize=11;fontFamily=Comic Sans MS;" value="boot_req_*" vertex="1">
+          <mxGeometry height="20" width="90" x="1100" y="605" as="geometry" />
+        </mxCell>
+        <mxCell id="lab_boot_rsp" parent="1" style="text;html=1;whiteSpace=wrap;fillColor=none;align=center;verticalAlign=middle;fontSize=11;fontFamily=Comic Sans MS;" value="boot_resp_*" vertex="1">
+          <mxGeometry height="20" width="95" x="1240" y="635" as="geometry" />
+        </mxCell>
+        <mxCell id="e_arb_cdc_req" edge="1" parent="1" source="arb" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;exitX=1;exitY=0.34;entryX=0;entryY=0.34;fillColor=none;" target="cdc" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_cdc_arb_rsp" edge="1" parent="1" source="cdc" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;exitX=0;exitY=0.72;entryX=1;entryY=0.72;fillColor=none;" target="arb" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="lab_bridge_req" parent="1" style="text;html=1;whiteSpace=wrap;fillColor=none;align=center;verticalAlign=middle;fontSize=11;fontFamily=Comic Sans MS;" value="bridge_req_*" vertex="1">
+          <mxGeometry height="20" width="95" x="1305" y="722" as="geometry" />
+        </mxCell>
+        <mxCell id="lab_bridge_rsp" parent="1" style="text;html=1;whiteSpace=wrap;fillColor=none;align=center;verticalAlign=middle;fontSize=11;fontFamily=Comic Sans MS;" value="bridge_resp_*" vertex="1">
+          <mxGeometry height="20" width="100" x="1300" y="815" as="geometry" />
+        </mxCell>
+        <mxCell id="e_cdc_mig_req" edge="1" parent="1" source="cdc" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;exitX=1;exitY=0.34;entryX=0;entryY=0.34;fillColor=none;" target="mig" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_mig_cdc_rsp" edge="1" parent="1" source="mig" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;exitX=0;exitY=0.72;entryX=1;entryY=0.72;fillColor=none;" target="cdc" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="lab_ddr_req" parent="1" style="text;html=1;whiteSpace=wrap;fillColor=none;align=center;verticalAlign=middle;fontSize=11;fontFamily=Comic Sans MS;" value="ddr_req_*" vertex="1">
+          <mxGeometry height="20" width="80" x="1580" y="722" as="geometry" />
+        </mxCell>
+        <mxCell id="lab_ddr_rsp" parent="1" style="text;html=1;whiteSpace=wrap;fillColor=none;align=center;verticalAlign=middle;fontSize=11;fontFamily=Comic Sans MS;" value="ddr_resp_*" vertex="1">
+          <mxGeometry height="20" width="85" x="1590" y="810" as="geometry" />
+        </mxCell>
+        <mxCell id="e_ddr_sys" edge="1" parent="1" source="mig" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;exitX=1;exitY=0.15;entryX=0;entryY=0.5;fillColor=none;" target="ddr_sys" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_ddr_status" edge="1" parent="1" source="mig" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;exitX=1;exitY=0.48;entryX=0;entryY=0.5;fillColor=none;" target="ddr_status" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_ddr_phy" edge="1" parent="1" source="mig" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;exitX=1;exitY=0.82;entryX=0;entryY=0.5;fillColor=none;" target="ddr_phy" value="">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
       </root>
