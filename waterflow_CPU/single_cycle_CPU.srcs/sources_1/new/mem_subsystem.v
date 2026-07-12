@@ -1,6 +1,10 @@
 `timescale 1ns / 1ps
 
-module mem_subsystem(
+module mem_subsystem #(
+    parameter [24:0] BOOT_NAND_START_WORD = 25'd0,
+    parameter [31:0] BOOT_LOAD_ADDR = 32'h1c00_0000,
+    parameter [31:0] BOOT_MAX_PAYLOAD_BYTES = 32'd129024
+) (
     input wire clk,
     input wire rst,
     input wire i_req_valid,
@@ -22,16 +26,10 @@ module mem_subsystem(
     input wire d_resp_ready,
     output reg [31:0] d_resp_rdata,
     output wire d_resp_err,
-    input wire periph_enable,
-    input wire [31:0] boot_status,
-    input wire boot_req_valid,
-    output wire boot_req_ready,
-    input wire boot_req_we,
-    input wire [3:0] boot_req_wstrb,
-    input wire [31:0] boot_req_addr,
-    input wire [31:0] boot_req_wdata,
-    output wire boot_resp_valid,
-    output wire [31:0] boot_resp_rdata,
+    output wire boot_done,
+    output wire boot_error,
+    output wire [31:0] boot_status,
+    input wire boot_ddr_ready,
     input wire ps2_clk,
     input wire ps2_dat,
     input wire vga_clk,
@@ -43,10 +41,9 @@ module mem_subsystem(
     output wire uart_tx,
     input wire uart_rx,
     output wire [7:0] irq,
-    output wire [15:0] led_value,
-    output wire [31:0] seg_pattern_lo,
-    output wire [31:0] seg_pattern_hi,
-    output wire [7:0] seg_enable,
+    output wire [15:0] led,
+    output wire [7:0] seg_csn,
+    output wire [7:0] seg,
     inout wire [7:0] nand_d,
     output wire nand_cle,
     output wire nand_ale,
@@ -56,6 +53,7 @@ module mem_subsystem(
     output wire nand_wp_n,
     input wire nand_rdy,
     input wire ddr_sys_clk_i,
+    input wire ddr_rst_n,
     output wire ddr_ui_clk,
     output wire ddr_ui_rst,
     output wire ddr_init_calib_complete,
@@ -81,6 +79,14 @@ module mem_subsystem(
     reg bridge_resp_is_boot;
     reg bridge_resp_is_write;
 
+    wire boot_req_valid;
+    wire boot_req_ready;
+    wire boot_req_we;
+    wire [3:0] boot_req_wstrb;
+    wire [31:0] boot_req_addr;
+    wire [31:0] boot_req_wdata;
+    wire boot_resp_valid;
+    wire [31:0] boot_resp_rdata;
     wire rst_hi = !rst;
 
     localparam [31:0] NOP_INST = 32'h0340_0000;
@@ -185,7 +191,7 @@ module mem_subsystem(
     assign i_cache_mem_resp_rdata = bridge_resp_rdata;
 
     wire mmio_req_valid = d_req_valid && !d_addr_exc && d_is_mmio &&
-                          d_resp_room && periph_enable;
+                          d_resp_room && boot_done;
     wire mmio_req_ready, mmio_resp_valid, mmio_resp_err;
     wire mmio_resp_ready = d_resp_room && !d_cache_resp_valid;
     wire [31:0] mmio_resp_rdata;
@@ -197,9 +203,13 @@ module mem_subsystem(
     wire i_exc_req_fire = i_req_valid && i_accept_room && i_addr_exc;
     wire d_exc_req_fire = d_req_valid && d_accept_room && d_addr_exc;
 
-    mmio_tdm_bus u_mmio(
+    mmio_tdm_bus #(
+        .BOOT_NAND_START_WORD(BOOT_NAND_START_WORD),
+        .BOOT_LOAD_ADDR(BOOT_LOAD_ADDR),
+        .BOOT_MAX_PAYLOAD_BYTES(BOOT_MAX_PAYLOAD_BYTES)
+    ) u_mmio (
         .clk(clk),
-        .rst(rst_hi || !periph_enable),
+        .rst(rst_hi),
         .req_valid(mmio_req_valid),
         .req_ready(mmio_req_ready),
         .req_we(d_req_we),
@@ -222,6 +232,18 @@ module mem_subsystem(
         .uart_rx(uart_rx),
         .irq(irq),
         .timer_value(timer),
+        .boot_ddr_ready(boot_ddr_ready),
+        .boot_req_valid(boot_req_valid),
+        .boot_req_ready(boot_req_ready),
+        .boot_req_we(boot_req_we),
+        .boot_req_wstrb(boot_req_wstrb),
+        .boot_req_addr(boot_req_addr),
+        .boot_req_wdata(boot_req_wdata),
+        .boot_resp_valid(boot_resp_valid),
+        .boot_resp_rdata(boot_resp_rdata),
+        .boot_status(boot_status),
+        .boot_done(boot_done),
+        .boot_error(boot_error),
         .nand_d(nand_d),
         .nand_cle(nand_cle),
         .nand_ale(nand_ale),
@@ -230,11 +252,9 @@ module mem_subsystem(
         .nand_we_n(nand_we_n),
         .nand_wp_n(nand_wp_n),
         .nand_rdy(nand_rdy),
-        .boot_status(boot_status),
-        .led_value(led_value),
-        .seg_pattern_lo(seg_pattern_lo),
-        .seg_pattern_hi(seg_pattern_hi),
-        .seg_enable(seg_enable)
+        .led(led),
+        .seg_csn(seg_csn),
+        .seg(seg)
     );
 
     icache_blocking u_icache(
@@ -276,8 +296,9 @@ module mem_subsystem(
         .mem_resp_rdata(d_cache_mem_resp_rdata)
     );
 
-    // CPU/cache/MMIO run in clk's 25 MHz domain. The MIG application port
-    // remains in ddr_ui_clk's domain, so requests and responses cross here.
+    // CPU, caches, and MMIO share clk's 25 MHz domain. The MIG application
+    // port remains in ddr_ui_clk's domain, so requests and responses cross
+    // only at this boundary.
     ddr_cdc_bridge u_ddr_cdc_bridge(
         .src_clk(clk),
         .src_rst_n(rst),
@@ -304,7 +325,7 @@ module mem_subsystem(
 
     ddr3_mig_bridge u_ddr3_bridge(
         .sys_clk_i(ddr_sys_clk_i),
-        .sys_rst(rst_hi),
+        .sys_rst(!ddr_rst_n),
         .ui_clk(ddr_ui_clk),
         .ui_rst(ddr_ui_rst),
         .init_calib_complete(ddr_init_calib_complete),
@@ -342,7 +363,7 @@ module mem_subsystem(
                          (i_addr_exc ? !i_resp_incoming : i_cache_req_ready);
     assign d_req_ready = d_req_valid && d_resp_room &&
                          (d_addr_exc ? !d_resp_incoming :
-                          (d_is_mmio ? (periph_enable && !d_cache_resp_valid && mmio_req_ready) :
+                          (d_is_mmio ? (boot_done && !d_cache_resp_valid && mmio_req_ready) :
                                        d_cache_req_ready));
 
     always @(posedge clk or negedge rst) begin

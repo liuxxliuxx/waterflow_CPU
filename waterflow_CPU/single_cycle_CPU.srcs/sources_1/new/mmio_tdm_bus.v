@@ -1,6 +1,10 @@
 `timescale 1ns / 1ps
 
-module mmio_tdm_bus(
+module mmio_tdm_bus #(
+    parameter [24:0] BOOT_NAND_START_WORD = 25'd0,
+    parameter [31:0] BOOT_LOAD_ADDR = 32'h1c00_0000,
+    parameter [31:0] BOOT_MAX_PAYLOAD_BYTES = 32'd129024
+) (
     input wire clk,
     input wire rst,
     input wire req_valid,
@@ -25,6 +29,18 @@ module mmio_tdm_bus(
     input wire uart_rx,
     output wire [7:0] irq,
     input wire [31:0] timer_value,
+    input wire boot_ddr_ready,
+    output wire boot_req_valid,
+    input wire boot_req_ready,
+    output wire boot_req_we,
+    output wire [3:0] boot_req_wstrb,
+    output wire [31:0] boot_req_addr,
+    output wire [31:0] boot_req_wdata,
+    input wire boot_resp_valid,
+    input wire [31:0] boot_resp_rdata,
+    output wire boot_done,
+    output wire boot_error,
+    output wire [31:0] boot_status,
     inout wire [7:0] nand_d,
     output wire nand_cle,
     output wire nand_ale,
@@ -33,11 +49,9 @@ module mmio_tdm_bus(
     output wire nand_we_n,
     output wire nand_wp_n,
     input wire nand_rdy,
-    input wire [31:0] boot_status,
-    output reg [15:0] led_value,
-    output reg [31:0] seg_pattern_lo,
-    output reg [31:0] seg_pattern_hi,
-    output reg [7:0] seg_enable
+    output wire [15:0] led,
+    output wire [7:0] seg_csn,
+    output wire [7:0] seg
 );
     localparam S_IDLE      = 2'd0,
                S_NAND_WAIT = 2'd1,
@@ -47,6 +61,73 @@ module mmio_tdm_bus(
     reg [1:0] state;
     reg [2:0] slot;
     reg vga_wait_req;
+    reg [15:0] led_value;
+    reg [31:0] seg_pattern_lo;
+    reg [31:0] seg_pattern_hi;
+    reg [7:0] seg_enable;
+    reg boot_done_d;
+    reg [22:0] boot_display_hold_count;
+    reg nand_req_valid;
+    wire nand_req_ready;
+    reg nand_req_we;
+    reg [7:0] nand_req_addr;
+    reg [3:0] nand_req_wstrb;
+    reg [31:0] nand_req_wdata;
+    wire nand_resp_valid;
+    wire [31:0] nand_resp_rdata;
+    wire nand_resp_err;
+
+    localparam [22:0] BOOT_DISPLAY_HOLD_CYCLES = 23'd6_250_000;
+
+    function [7:0] hex_segments;
+        input [3:0] value;
+        begin
+            case (value)
+                4'h0: hex_segments = 8'h3f;
+                4'h1: hex_segments = 8'h06;
+                4'h2: hex_segments = 8'h5b;
+                4'h3: hex_segments = 8'h4f;
+                4'h4: hex_segments = 8'h66;
+                4'h5: hex_segments = 8'h6d;
+                4'h6: hex_segments = 8'h7d;
+                4'h7: hex_segments = 8'h07;
+                4'h8: hex_segments = 8'h7f;
+                4'h9: hex_segments = 8'h6f;
+                4'ha: hex_segments = 8'h77;
+                4'hb: hex_segments = 8'h7c;
+                4'hc: hex_segments = 8'h39;
+                4'hd: hex_segments = 8'h5e;
+                4'he: hex_segments = 8'h79;
+                default: hex_segments = 8'h71;
+            endcase
+        end
+    endfunction
+
+    wire boot_display_active = !boot_done || (boot_display_hold_count != 23'd0);
+    wire [31:0] boot_seg_pattern_lo = {
+        hex_segments(boot_status[19:16]), hex_segments(boot_status[23:20]),
+        hex_segments(boot_status[27:24]), hex_segments(boot_status[31:28])
+    };
+    wire [31:0] boot_seg_pattern_hi = {
+        hex_segments(boot_status[3:0]), hex_segments(boot_status[7:4]),
+        hex_segments(boot_status[11:8]), hex_segments(boot_status[15:12])
+    };
+    wire [31:0] active_seg_pattern_lo = boot_display_active ? boot_seg_pattern_lo : seg_pattern_lo;
+    wire [31:0] active_seg_pattern_hi = boot_display_active ? boot_seg_pattern_hi : seg_pattern_hi;
+    wire [7:0] active_seg_enable = boot_display_active ? 8'hff : seg_enable;
+
+    // Board LEDs are active-low; software uses one to mean illuminated.
+    assign led = ~led_value;
+
+    sevenseg_scan u_sevenseg_scan (
+        .clk(clk),
+        .rst(rst),
+        .pattern_lo(active_seg_pattern_lo),
+        .pattern_hi(active_seg_pattern_hi),
+        .enable(active_seg_enable),
+        .seg_csn(seg_csn),
+        .seg(seg)
+    );
 
     wire [7:0] ps2_rdata;
     wire ps2_empty, ps2_full, ps2_overflow, ps2_frame_error;
@@ -63,15 +144,6 @@ module mmio_tdm_bus(
     wire uart_busy;
     reg [7:0] uart_data;
 
-    reg nand_req_valid;
-    wire nand_req_ready;
-    reg nand_req_we;
-    reg [7:0] nand_req_addr;
-    reg [3:0] nand_req_wstrb;
-    reg [31:0] nand_req_wdata;
-    wire nand_resp_valid;
-    wire [31:0] nand_resp_rdata;
-    wire nand_resp_err;
 
     wire dev_ps2   = (req_addr[31:16] == 16'h1fe0);
     wire dev_vga   = (req_addr[31:16] == 16'h1fe1);
@@ -154,9 +226,25 @@ module mmio_tdm_bus(
         .busy(uart_busy)
     );
 
-    nand_ctrl_readonly u_nand(
+    nand_controller #(
+        .BOOT_NAND_START_WORD(BOOT_NAND_START_WORD),
+        .BOOT_LOAD_ADDR(BOOT_LOAD_ADDR),
+        .BOOT_MAX_PAYLOAD_BYTES(BOOT_MAX_PAYLOAD_BYTES)
+    ) u_nand_controller (
         .clk(clk),
-        .rst(rst),
+        .rst_n(!rst),
+        .boot_ddr_ready(boot_ddr_ready),
+        .boot_req_valid(boot_req_valid),
+        .boot_req_ready(boot_req_ready),
+        .boot_req_we(boot_req_we),
+        .boot_req_wstrb(boot_req_wstrb),
+        .boot_req_addr(boot_req_addr),
+        .boot_req_wdata(boot_req_wdata),
+        .boot_resp_valid(boot_resp_valid),
+        .boot_resp_rdata(boot_resp_rdata),
+        .boot_done(boot_done),
+        .boot_error(boot_error),
+        .boot_status(boot_status),
         .mmio_req_ready(nand_req_ready),
         .mmio_req_valid(nand_req_valid),
         .mmio_req_we(nand_req_we),
@@ -201,7 +289,14 @@ module mmio_tdm_bus(
             seg_pattern_lo <= 32'h0000_0000;
             seg_pattern_hi <= 32'h0000_0000;
             seg_enable <= 8'h00;
+            boot_done_d <= 1'b0;
+            boot_display_hold_count <= 23'd0;
         end else begin
+            boot_done_d <= boot_done;
+            if (boot_done && !boot_done_d)
+                boot_display_hold_count <= BOOT_DISPLAY_HOLD_CYCLES;
+            else if (boot_display_hold_count != 23'd0)
+                boot_display_hold_count <= boot_display_hold_count - 23'd1;
             slot <= slot + 3'd1;
             ps2_rd <= 1'b0;
             ps2_clear_errors <= 1'b0;

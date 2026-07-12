@@ -8,12 +8,11 @@ set_property IOSTANDARD LVCMOS33 [get_ports {sys_clk_i}]
 set_property CFGBVS VCCO [current_design]
 set_property CONFIG_VOLTAGE 3.3 [current_design]
 
-# soc_vga_clk_div divides the 100 MHz board clock by four.  This is the
-# 25 MHz clock domain for CPU, caches, MMIO, NAND boot, and VGA. Project-mode
-# synthesis gets the master clock from soc_clock_synth.xdc; implementation and
-# the non-project flow get the equivalent 100 MHz master from the linked MIG.
-create_generated_clock -name soc_clk_25 -source [get_ports {sys_clk_i}] \
-    -divide_by 4 [get_pins {u_vga_clk_div/u_pix_clk_bufg/O}]
+# clk_wiz_0 consumes this 100 MHz board clock and generates the three clocks
+# used by soc_top: clk_out1=25 MHz (CPU, memory subsystem, and control),
+# clk_out2=100 MHz (MIG system clock), and clk_out3=25 MHz (VGA).  The DDR
+# bridge derives the MIG-required 200 MHz clk_ref_i from clk_out2.  Clocking
+# Wizard constraints derive all three outputs from sys_clk_i automatically.
 
 set_property PACKAGE_PIN Y3 [get_ports {rst_n}]
 set_property IOSTANDARD LVCMOS33 [get_ports {rst_n}]
