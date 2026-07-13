@@ -15,25 +15,35 @@ module FPU(
     output [1:0]  exc_code
 );
 
-    reg        ready_r;
-    reg [31:0] result_r;
-    reg [1:0]  exc_code_r;
+    wire addsub_start = en &&
+                        ((fpu_op == `FP_adds) ||
+                         (fpu_op == `FP_subs));
+    wire addsub_sub = (fpu_op == `FP_subs);
+    wire mul_start  = en && (fpu_op == `FP_muls);
 
     wire [31:0] addsub_res;
     wire        addsub_exc_of;
     wire        addsub_exc_uf;
+    wire        addsub_busy;
+    wire        addsub_ready;
+
     wire [31:0] mul_res;
     wire        mul_exc_of;
     wire        mul_exc_uf;
     wire        mul_busy;
     wire        mul_ready;
-    wire        mul_start = en && (fpu_op == `FP_muls);
-    wire        addsub_sub = (fpu_op == `FP_subs);
+
+    reg invalid_ready_r;
 
     fp_add_s u_fp_add_s(
+        .clk    (clk),
+        .rst    (rst),
+        .start  (addsub_start),
         .sub    (addsub_sub),
         .A      (A),
         .B      (B),
+        .busy   (addsub_busy),
+        .ready  (addsub_ready),
         .R      (addsub_res),
         .exc_of (addsub_exc_of),
         .exc_uf (addsub_exc_uf)
@@ -52,39 +62,29 @@ module FPU(
         .exc_uf (mul_exc_uf)
     );
 
+    wire [1:0] addsub_exc_code = addsub_exc_of ? 2'b10 :
+                                  addsub_exc_uf ? 2'b11 : 2'b00;
     wire [1:0] mul_exc_code = mul_exc_of ? 2'b10 :
                                mul_exc_uf ? 2'b11 : 2'b00;
 
-    assign ready         = ready_r || mul_ready;
-    assign busy          = mul_busy || (en && (fpu_op != `FP_muls));
-    assign fpu_res       = mul_ready ? mul_res : result_r;
-    assign exc_code       = mul_ready ? mul_exc_code : exc_code_r;
-    assign fpu_exception  = |exc_code;
+    assign ready = addsub_ready || mul_ready || invalid_ready_r;
+    assign busy  = addsub_busy || mul_busy;
+
+    assign fpu_res = mul_ready ? mul_res :
+                     addsub_ready ? addsub_res : 32'b0;
+    assign exc_code = mul_ready ? mul_exc_code :
+                      addsub_ready ? addsub_exc_code : 2'b00;
+    assign fpu_exception = |exc_code;
 
     always @(posedge clk or negedge rst) begin
         if (!rst) begin
-            ready_r    <= 1'b0;
-            result_r   <= 32'b0;
-            exc_code_r <= 2'b00;
+            invalid_ready_r <= 1'b0;
         end
         else begin
-            ready_r <= 1'b0;
-
-            if (en && (fpu_op != `FP_muls)) begin
-                ready_r <= 1'b1;
-                case (fpu_op)
-                    `FP_adds: result_r <= addsub_res;
-                    `FP_subs: result_r <= addsub_res;
-                    default:  result_r <= 32'b0;
-                endcase
-
-                if (addsub_exc_of)
-                    exc_code_r <= 2'b10;
-                else if (addsub_exc_uf)
-                    exc_code_r <= 2'b11;
-                else
-                    exc_code_r <= 2'b00;
-            end
+            invalid_ready_r <= en &&
+                               (fpu_op != `FP_adds) &&
+                               (fpu_op != `FP_subs) &&
+                               (fpu_op != `FP_muls);
         end
     end
 
