@@ -1,4 +1,5 @@
 `timescale 1ns / 1ps
+
 module icache_blocking(
     input wire clk,
     input wire rst,
@@ -24,17 +25,17 @@ module icache_blocking(
 
     reg [31:0] lookup_data_r;
     reg [21:0] lookup_tag_r;
+    reg lookup_valid_r;
 
     wire [7:0] index = req_addr[9:2];
     wire [21:0] req_tag = req_addr[31:10];
+    wire hit = lookup_valid_r &&
+               (lookup_tag_r == saved_addr[31:10]);
 
     localparam S_IDLE = 2'd0,
                S_WAIT_MEM = 2'd1,
                S_RESP = 2'd2,
                S_LOOKUP = 2'd3;
-
-    wire hit = valid[saved_addr[9:2]] &&
-               (lookup_tag_r == saved_addr[31:10]);
 
     assign req_ready = (state == S_IDLE) && (!resp_valid || resp_ready);
 
@@ -42,6 +43,7 @@ module icache_blocking(
         if (req_valid && req_ready) begin
             lookup_data_r <= data[index];
             lookup_tag_r <= tag[index];
+            lookup_valid_r <= valid[index];
         end
 
         if ((state == S_WAIT_MEM) && mem_resp_valid) begin
@@ -125,4 +127,5 @@ module icache_blocking(
             endcase
         end
     end
+
 endmodule

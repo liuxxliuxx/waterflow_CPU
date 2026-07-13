@@ -34,11 +34,16 @@ module dcache_blocking(
 
     reg [31:0] lookup_data_r;
     reg [21:0] lookup_tag_r;
+    reg lookup_valid_r;
+    reg lookup_dirty_r;
+
     reg [31:0] victim_data_r;
     reg [21:0] victim_tag_r;
 
     wire [7:0] index = req_addr[9:2];
     wire [21:0] req_tag = req_addr[31:10];
+    wire hit = lookup_valid_r &&
+               (lookup_tag_r == saved_addr[31:10]);
 
     localparam S_IDLE = 3'd0,
                S_SEND_WB = 3'd1,
@@ -46,9 +51,6 @@ module dcache_blocking(
                S_WAIT_MEM = 3'd3,
                S_RESP = 3'd4,
                S_LOOKUP = 3'd5;
-
-    wire hit = valid[saved_addr[9:2]] &&
-               (lookup_tag_r == saved_addr[31:10]);
 
     assign req_ready = (state == S_IDLE) && (!resp_valid || resp_ready);
 
@@ -80,6 +82,8 @@ module dcache_blocking(
         if (req_valid && req_ready) begin
             lookup_data_r <= data[index];
             lookup_tag_r <= tag[index];
+            lookup_valid_r <= valid[index];
+            lookup_dirty_r <= dirty[index];
         end
 
         if (cache_data_we)
@@ -132,14 +136,14 @@ module dcache_blocking(
                         end else begin
                             resp_rdata <= lookup_data_r;
                         end
+
                         resp_valid <= 1'b1;
                         state <= S_RESP;
                     end else begin
                         victim_data_r <= lookup_data_r;
                         victim_tag_r <= lookup_tag_r;
 
-                        if (valid[saved_addr[9:2]] &&
-                            dirty[saved_addr[9:2]])
+                        if (lookup_valid_r && lookup_dirty_r)
                             state <= S_SEND_WB;
                         else
                             state <= S_SEND_MEM;
@@ -206,4 +210,5 @@ module dcache_blocking(
             endcase
         end
     end
+
 endmodule
