@@ -54,8 +54,14 @@ module CPU(
     wire        bpu_pred_taken_raw;
     wire [31:0] bpu_pred_target_raw;
 
-    wire        pred_taken  = if_valid ? bpu_pred_taken_raw  : 1'b0;
-    wire [31:0] pred_target = if_valid ? bpu_pred_target_raw : 32'b0;
+    wire [31:0] bpu_query_pc =
+        inst_resp_valid ? inst_req_vaddr : if_pc;
+
+    wire [31:0] bpu_query_inst =
+        inst_resp_valid ? inst_resp_data : if_inst;
+
+    wire        pred_taken;
+    wire [31:0] pred_target;
 
 
 
@@ -252,8 +258,11 @@ module CPU(
         .redirect_valid(redirect_valid),
         .redirect_pc(redirect_pc),
 
-        .pred_taken(pred_taken),
-        .pred_target(pred_target),
+        .pred_taken(bpu_pred_taken_raw),
+        .pred_target(bpu_pred_target_raw),
+
+        .if_pred_taken(pred_taken),
+        .if_pred_target(pred_target),
 
         .if_valid(if_valid),
         .if_pc(if_pc),
@@ -281,8 +290,8 @@ module CPU(
         .clk(clk),
         .rst(rst),
 
-        .if_pc(if_pc),
-        .if_inst(if_inst),
+        .if_pc(bpu_query_pc),
+        .if_inst(bpu_query_inst),
 
         .pred_taken(bpu_pred_taken_raw),
         .pred_target(bpu_pred_target_raw),

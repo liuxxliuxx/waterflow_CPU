@@ -1,44 +1,80 @@
+`timescale 1ns / 1ps
+
 module fp_add_s(
+    input         clk,
+    input         rst,
+    input         start,
     input         sub,
     input  [31:0] A,
     input  [31:0] B,
+
+    output        busy,
+    output        ready,
     output reg [31:0] R,
     output reg        exc_of,
     output reg        exc_uf
 );
 
-    wire [31:0] B_eff = sub ? {~B[31], B[30:0]} : B;
+    localparam S_IDLE      = 3'd0;
+    localparam S_ALIGN     = 3'd1;
+    localparam S_ADD_SUB   = 3'd2;
+    localparam S_NORMALIZE = 3'd3;
+    localparam S_ROUND     = 3'd4;
+    localparam S_PACK      = 3'd5;
+    localparam S_DONE      = 3'd6;
 
-    reg        sign_a;
-    reg        sign_b;
-    reg [7:0]  exp_a;
-    reg [7:0]  exp_b;
-    reg [22:0] frac_a;
-    reg [22:0] frac_b;
+    reg [2:0] state;
 
-    reg [7:0]  expa_eff;
-    reg [7:0]  expb_eff;
-    reg [23:0] mana;
-    reg [23:0] manb;
+    reg [31:0] a_r;
+    reg [31:0] b_eff_r;
 
-    reg [26:0] mant_a_ext;
-    reg [26:0] mant_b_ext;
+    reg [26:0] mant_big_r;
+    reg [26:0] mant_small_r;
+    reg        sign_big_r;
+    reg        sign_small_r;
+    reg [8:0]  exp_big_r;
 
-    reg [26:0] mant_big;
-    reg [26:0] mant_small;
-    reg        sign_big;
-    reg        sign_small;
-    reg [8:0]  exp_big;
+    reg [26:0] mant_work_r;
+    reg [8:0]  exp_res_r;
+    reg        sign_res_r;
+    reg [24:0] rounded_r;
 
-    reg [27:0] mant_sum;
-    reg [26:0] mant_res;
-    reg [8:0]  exp_res;
-    reg        sign_res;
+    wire        sign_a_w = a_r[31];
+    wire        sign_b_w = b_eff_r[31];
+    wire [7:0]  exp_a_w  = a_r[30:23];
+    wire [7:0]  exp_b_w  = b_eff_r[30:23];
+    wire [22:0] frac_a_w = a_r[22:0];
+    wire [22:0] frac_b_w = b_eff_r[22:0];
 
-    reg [24:0] rounded;
-    reg        round_inc;
+    wire [7:0] expa_eff_w = (exp_a_w == 8'b0) ? 8'd1 : exp_a_w;
+    wire [7:0] expb_eff_w = (exp_b_w == 8'b0) ? 8'd1 : exp_b_w;
+    wire [23:0] mana_w = (exp_a_w == 8'b0) ?
+                           {1'b0, frac_a_w} : {1'b1, frac_a_w};
+    wire [23:0] manb_w = (exp_b_w == 8'b0) ?
+                           {1'b0, frac_b_w} : {1'b1, frac_b_w};
+    wire [26:0] mant_a_ext_w = {mana_w, 3'b000};
+    wire [26:0] mant_b_ext_w = {manb_w, 3'b000};
 
-    integer i;
+    wire a_nan_w  = (exp_a_w == 8'hff) && (frac_a_w != 23'b0);
+    wire b_nan_w  = (exp_b_w == 8'hff) && (frac_b_w != 23'b0);
+    wire a_inf_w  = (exp_a_w == 8'hff) && (frac_a_w == 23'b0);
+    wire b_inf_w  = (exp_b_w == 8'hff) && (frac_b_w == 23'b0);
+    wire a_zero_w = (a_r[30:0] == 31'b0);
+    wire b_zero_w = (b_eff_r[30:0] == 31'b0);
+
+    wire a_is_big_w =
+        (expa_eff_w > expb_eff_w) ||
+        ((expa_eff_w == expb_eff_w) && (mana_w >= manb_w));
+
+    wire [27:0] mant_add_w =
+        {1'b0, mant_big_r} + {1'b0, mant_small_r};
+    wire [24:0] rounded_w =
+        {1'b0, mant_work_r[26:3]} +
+        (mant_work_r[2] &
+         (mant_work_r[1] | mant_work_r[0] | mant_work_r[3]));
+
+    assign busy  = (state != S_IDLE) && (state != S_DONE);
+    assign ready = (state == S_DONE);
 
     function [26:0] shift_right_sticky;
         input [26:0] data;
@@ -60,133 +96,189 @@ module fp_add_s(
                 end
 
                 shift_right_sticky = data >> shamt;
-                shift_right_sticky[0] = shift_right_sticky[0] | sticky;
+                shift_right_sticky[0] =
+                    shift_right_sticky[0] | sticky;
             end
         end
     endfunction
 
-    always @(*) begin
-        sign_a = A[31];
-        sign_b = B_eff[31];
-        exp_a  = A[30:23];
-        exp_b  = B_eff[30:23];
-        frac_a = A[22:0];
-        frac_b = B_eff[22:0];
-
-        R      = 32'b0;
-        exc_of = 1'b0;
-        exc_uf = 1'b0;
-
-        if ((exp_a == 8'hff && frac_a != 0) ||
-            (exp_b == 8'hff && frac_b != 0)) begin
-            R = 32'h7fc0_0000;
+    always @(posedge clk or negedge rst) begin
+        if (!rst) begin
+            state        <= S_IDLE;
+            a_r          <= 32'b0;
+            b_eff_r      <= 32'b0;
+            mant_big_r   <= 27'b0;
+            mant_small_r <= 27'b0;
+            sign_big_r   <= 1'b0;
+            sign_small_r <= 1'b0;
+            exp_big_r    <= 9'b0;
+            mant_work_r  <= 27'b0;
+            exp_res_r    <= 9'b0;
+            sign_res_r   <= 1'b0;
+            rounded_r    <= 25'b0;
+            R            <= 32'b0;
+            exc_of       <= 1'b0;
+            exc_uf       <= 1'b0;
         end
-
-        else if ((exp_a == 8'hff && frac_a == 0) &&
-                 (exp_b == 8'hff && frac_b == 0)) begin
-            if (sign_a != sign_b)
-                R = 32'h7fc0_0000;
-            else
-                R = {sign_a, 8'hff, 23'b0};
+        else if (start) begin
+            // A new start supersedes an in-flight add/sub.  This lets the
+            // existing EXU recover from a pipeline flush without adding a
+            // cancellation signal to the FPU interface.
+            a_r          <= A;
+            b_eff_r      <= sub ? {~B[31], B[30:0]} : B;
+            state        <= S_ALIGN;
+            mant_big_r   <= 27'b0;
+            mant_small_r <= 27'b0;
+            mant_work_r  <= 27'b0;
+            rounded_r    <= 25'b0;
+            R            <= 32'b0;
+            exc_of       <= 1'b0;
+            exc_uf       <= 1'b0;
         end
-
-        else if (exp_a == 8'hff && frac_a == 0) begin
-            R = {sign_a, 8'hff, 23'b0};
-        end
-
-        else if (exp_b == 8'hff && frac_b == 0) begin
-            R = {sign_b, 8'hff, 23'b0};
-        end
-
-        else if (A[30:0] == 31'b0 && B_eff[30:0] == 31'b0) begin
-            R = {(sign_a & sign_b), 31'b0};
-        end
-
         else begin
-            expa_eff = (exp_a == 8'b0) ? 8'd1 : exp_a;
-            expb_eff = (exp_b == 8'b0) ? 8'd1 : exp_b;
-
-            mana = (exp_a == 8'b0) ? {1'b0, frac_a} : {1'b1, frac_a};
-            manb = (exp_b == 8'b0) ? {1'b0, frac_b} : {1'b1, frac_b};
-
-            mant_a_ext = {mana, 3'b000};
-            mant_b_ext = {manb, 3'b000};
-
-            if ((expa_eff > expb_eff) ||
-                ((expa_eff == expb_eff) && (mana >= manb))) begin
-                mant_big   = mant_a_ext;
-                mant_small = shift_right_sticky(mant_b_ext, expa_eff - expb_eff);
-                sign_big   = sign_a;
-                sign_small = sign_b;
-                exp_big    = {1'b0, expa_eff};
-            end
-            else begin
-                mant_big   = mant_b_ext;
-                mant_small = shift_right_sticky(mant_a_ext, expb_eff - expa_eff);
-                sign_big   = sign_b;
-                sign_small = sign_a;
-                exp_big    = {1'b0, expb_eff};
-            end
-
-            if (sign_big == sign_small) begin
-                mant_sum = {1'b0, mant_big} + {1'b0, mant_small};
-                sign_res = sign_big;
-                exp_res  = exp_big;
-
-                if (mant_sum[27]) begin
-                    mant_res    = mant_sum[27:1];
-                    mant_res[0] = mant_res[0] | mant_sum[0];
-                    exp_res     = exp_big + 9'd1;
+            case (state)
+                S_IDLE: begin
+                    state <= S_IDLE;
                 end
-                else begin
-                    mant_res = mant_sum[26:0];
-                end
-            end
-            else begin
-                sign_res = sign_big;
-                exp_res  = exp_big;
 
-                if (mant_big == mant_small) begin
-                    mant_res = 27'b0;
-                    exp_res  = 9'b0;
-                    sign_res = 1'b0;
-                end
-                else begin
-                    mant_res = mant_big - mant_small;
+                S_ALIGN: begin
+                    exc_of <= 1'b0;
+                    exc_uf <= 1'b0;
 
-                    for (i = 0; i < 27; i = i + 1) begin
-                        if (mant_res[26] == 1'b0 && exp_res > 9'd1 && mant_res != 0) begin
-                            mant_res = mant_res << 1;
-                            exp_res  = exp_res - 9'd1;
+                    if (a_nan_w || b_nan_w) begin
+                        R     <= 32'h7fc0_0000;
+                        state <= S_DONE;
+                    end
+                    else if (a_inf_w && b_inf_w) begin
+                        if (sign_a_w != sign_b_w)
+                            R <= 32'h7fc0_0000;
+                        else
+                            R <= {sign_a_w, 8'hff, 23'b0};
+                        state <= S_DONE;
+                    end
+                    else if (a_inf_w) begin
+                        R     <= {sign_a_w, 8'hff, 23'b0};
+                        state <= S_DONE;
+                    end
+                    else if (b_inf_w) begin
+                        R     <= {sign_b_w, 8'hff, 23'b0};
+                        state <= S_DONE;
+                    end
+                    else if (a_zero_w && b_zero_w) begin
+                        R     <= {(sign_a_w & sign_b_w), 31'b0};
+                        state <= S_DONE;
+                    end
+                    else begin
+                        if (a_is_big_w) begin
+                            mant_big_r   <= mant_a_ext_w;
+                            mant_small_r <= shift_right_sticky(
+                                mant_b_ext_w,
+                                expa_eff_w - expb_eff_w
+                            );
+                            sign_big_r   <= sign_a_w;
+                            sign_small_r <= sign_b_w;
+                            exp_big_r    <= {1'b0, expa_eff_w};
                         end
+                        else begin
+                            mant_big_r   <= mant_b_ext_w;
+                            mant_small_r <= shift_right_sticky(
+                                mant_a_ext_w,
+                                expb_eff_w - expa_eff_w
+                            );
+                            sign_big_r   <= sign_b_w;
+                            sign_small_r <= sign_a_w;
+                            exp_big_r    <= {1'b0, expb_eff_w};
+                        end
+                        state <= S_ADD_SUB;
                     end
                 end
-            end
 
-            if (mant_res == 0) begin
-                R = 32'b0;
-            end
-            else begin
-                round_inc = mant_res[2] & (mant_res[1] | mant_res[0] | mant_res[3]);
-                rounded   = {1'b0, mant_res[26:3]} + round_inc;
+                S_ADD_SUB: begin
+                    sign_res_r <= sign_big_r;
 
-                if (rounded[24]) begin
-                    rounded = rounded >> 1;
-                    exp_res = exp_res + 9'd1;
+                    if (sign_big_r == sign_small_r) begin
+                        if (mant_add_w[27]) begin
+                            mant_work_r    <= mant_add_w[27:1];
+                            mant_work_r[0] <=
+                                mant_add_w[1] | mant_add_w[0];
+                            exp_res_r <= exp_big_r + 9'd1;
+                        end
+                        else begin
+                            mant_work_r <= mant_add_w[26:0];
+                            exp_res_r   <= exp_big_r;
+                        end
+                        state <= S_ROUND;
+                    end
+                    else if (mant_big_r == mant_small_r) begin
+                        mant_work_r <= 27'b0;
+                        exp_res_r   <= 9'b0;
+                        sign_res_r  <= 1'b0;
+                        R           <= 32'b0;
+                        state       <= S_DONE;
+                    end
+                    else begin
+                        mant_work_r <= mant_big_r - mant_small_r;
+                        exp_res_r   <= exp_big_r;
+                        state       <= S_NORMALIZE;
+                    end
                 end
 
-                if (exp_res >= 9'd255) begin
-                    R      = {sign_res, 8'hff, 23'b0};
-                    exc_of = 1'b1;
+                S_NORMALIZE: begin
+                    if (mant_work_r == 27'b0) begin
+                        R          <= 32'b0;
+                        sign_res_r <= 1'b0;
+                        exp_res_r  <= 9'b0;
+                        state      <= S_DONE;
+                    end
+                    else if (!mant_work_r[26] && (exp_res_r > 9'd1)) begin
+                        mant_work_r <= mant_work_r << 1;
+                        exp_res_r   <= exp_res_r - 9'd1;
+                    end
+                    else begin
+                        state <= S_ROUND;
+                    end
                 end
-                else if (exp_res == 9'd1 && rounded[23] == 1'b0) begin
-                    R      = {sign_res, 8'b0, rounded[22:0]};
-                    exc_uf = 1'b1;
+
+                S_ROUND: begin
+                    if (mant_work_r == 27'b0) begin
+                        R     <= 32'b0;
+                        state <= S_DONE;
+                    end
+                    else begin
+                        if (rounded_w[24]) begin
+                            rounded_r <= rounded_w >> 1;
+                            exp_res_r <= exp_res_r + 9'd1;
+                        end
+                        else begin
+                            rounded_r <= rounded_w;
+                        end
+                        state <= S_PACK;
+                    end
                 end
-                else begin
-                    R = {sign_res, exp_res[7:0], rounded[22:0]};
+
+                S_PACK: begin
+                    if (exp_res_r >= 9'd255) begin
+                        R      <= {sign_res_r, 8'hff, 23'b0};
+                        exc_of <= 1'b1;
+                    end
+                    else if ((exp_res_r == 9'd1) && !rounded_r[23]) begin
+                        R      <= {sign_res_r, 8'b0, rounded_r[22:0]};
+                        exc_uf <= 1'b1;
+                    end
+                    else begin
+                        R <= {sign_res_r, exp_res_r[7:0], rounded_r[22:0]};
+                    end
+                    state <= S_DONE;
                 end
-            end
+
+                S_DONE: begin
+                    state <= S_IDLE;
+                end
+
+                default: begin
+                    state <= S_IDLE;
+                end
+            endcase
         end
     end
 
