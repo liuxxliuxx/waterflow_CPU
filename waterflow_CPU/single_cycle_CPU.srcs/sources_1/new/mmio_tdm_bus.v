@@ -116,7 +116,6 @@ module mmio_tdm_bus #(
     wire [31:0] active_seg_pattern_hi = boot_display_active ? boot_seg_pattern_hi : seg_pattern_hi;
     wire [7:0] active_seg_enable = boot_display_active ? 8'hff : seg_enable;
 
-    // Board LEDs are active-low; software uses one to mean illuminated.
     assign led = ~led_value;
 
     sevenseg_scan u_sevenseg_scan (

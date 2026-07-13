@@ -151,8 +151,6 @@ module mem_subsystem #(
     wire d_cache_mem_resp_valid;
     wire [31:0] d_cache_mem_resp_rdata;
 
-    // The boot loader owns DDR before the CPU is released.  It is deliberately
-    // first in this arbitration so an accidental CPU request cannot delay boot.
     wire boot_mem_sel = boot_req_valid;
     wire d_cache_mem_sel = d_cache_mem_req_valid && !boot_mem_sel;
     wire i_cache_mem_sel = i_cache_mem_req_valid &&
@@ -296,9 +294,6 @@ module mem_subsystem #(
         .mem_resp_rdata(d_cache_mem_resp_rdata)
     );
 
-    // CPU, caches, and MMIO share clk's 25 MHz domain. The MIG application
-    // port remains in ddr_ui_clk's domain, so requests and responses cross
-    // only at this boundary.
     ddr_cdc_bridge u_ddr_cdc_bridge(
         .src_clk(clk),
         .src_rst_n(rst),
