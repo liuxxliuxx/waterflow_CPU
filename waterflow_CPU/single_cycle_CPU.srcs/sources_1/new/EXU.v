@@ -173,7 +173,7 @@ module EXU(
                 if (FPUctr == `FP_movs)
                     ex_res = fp_rdata1;
                 else
-                    ex_res = multi_done_hold ? multi_result_hold : fpu_res;
+                    ex_res = multi_result_hold;
             end
 
             default: begin

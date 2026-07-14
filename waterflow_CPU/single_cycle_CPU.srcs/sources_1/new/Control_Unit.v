@@ -101,10 +101,10 @@ module Control_Unit(
     wire ertn   = (inst        == 32'h0648_3800);//返回异常处理程序
 
     wire dbar   = (inst[31:15] == 17'h070e4);//数据访问屏障
-    wire ibar   = (inst[31:15] == 17'h070e5);//指令访问屏障
-    wire idle   = (inst[31:15] == 17'h00c91);//等待中断
-    wire cacop  = (inst[31:22] == 10'h018);//cache操作指令
-
+    wire ibar   = (inst[31:15] == 17'h070e5);
+    wire idle   = (inst[31:15] == 17'h00c91);
+    wire cacop  = (inst[31:22] == 10'h018);
+    
     wire ll_w   = (inst[31:24] == 8'h20);//读内�??+记录地址+设置llbit
     wire sc_w   = (inst[31:24] == 8'h21);//判断llbit，如果是1就写内存并且rd�??1，否则rd�??0不写内存
 
@@ -132,8 +132,6 @@ module Control_Unit(
     wire fld_s  = (inst[31:22] == 10'h0ac);//
     wire fst_s  = (inst[31:22] == 10'h0ad);//
     
-    wire bstrins_w = (inst[31:22] == 10'h006); //未实�??
-    wire bstrpick_w= (inst[31:22] == 10'h007); //未实�??
     wire slti   = (inst[31:22] == 10'h008);//
     wire sltui  = (inst[31:22] == 10'h009);//
 
@@ -170,6 +168,8 @@ module Control_Unit(
 
     
     
+    
+
     wire r_type = add_w | sub_w | mul_w | and_ | nor_ | xor_ | or_ | slt | sltu | sll_w | srl_w | sra_w | andn | orn | mulh_w | mulh_wu | div_w | mod_w | div_wu | mod_wu | alsl_w | maskeqz | masknez ;
     
     wire load_gpr  = ld_b | ld_h | ld_w | ld_bu | ld_hu | ll_w;

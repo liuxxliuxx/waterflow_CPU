@@ -1,0 +1,175 @@
+Copyright 1986-2019 Xilinx, Inc. All Rights Reserved.
+----------------------------------------------------------------------------------------
+| Tool Version : Vivado v.2019.2 (win64) Build 2708876 Wed Nov  6 21:40:23 MST 2019
+| Date         : Sat Jul 11 22:26:57 2026
+| Host         : LAPTOP-LIUXX running 64-bit major release  (build 9200)
+| Command      : check_timing -verbose -file W:/reports/soc_top_check_timing_routed.rpt
+| Design       : soc_top
+| Device       : 7a200t-fbg676
+| Speed File   : -1  PRODUCTION 1.23 2018-06-13
+----------------------------------------------------------------------------------------
+
+
+check_timing report
+
+Table of Contents
+-----------------
+1. checking no_clock
+2. checking constant_clock
+3. checking pulse_width_clock
+4. checking unconstrained_internal_endpoints
+5. checking no_input_delay
+6. checking no_output_delay
+7. checking multiple_clock
+8. checking generated_clocks
+9. checking loops
+10. checking partial_input_delay
+11. checking partial_output_delay
+12. checking latch_loops
+
+1. checking no_clock
+--------------------
+ There are 0 register/latch pins with no clock.
+
+
+2. checking constant_clock
+--------------------------
+ There are 0 register/latch pins with constant_clock.
+
+
+3. checking pulse_width_clock
+-----------------------------
+ There are 0 register/latch pins which need pulse_width check
+
+
+4. checking unconstrained_internal_endpoints
+--------------------------------------------
+ There are 0 pins that are not constrained for maximum delay.
+
+ There are 0 pins that are not constrained for maximum delay due to constant clock.
+
+
+5. checking no_input_delay
+--------------------------
+ There are 0 input ports with no input delay specified.
+
+ There are 12 input ports with no input delay but user has a false path constraint. (MEDIUM)
+
+nand_d[0]
+nand_d[1]
+nand_d[2]
+nand_d[3]
+nand_d[4]
+nand_d[5]
+nand_d[6]
+nand_d[7]
+nand_rdy
+ps2_clk
+ps2_dat
+rst_n
+
+
+6. checking no_output_delay
+---------------------------
+ There are 0 ports with no output delay specified.
+
+ There are 64 ports with no output delay but user has a false path constraint (MEDIUM)
+
+ddr3_reset_n
+led[0]
+led[10]
+led[11]
+led[12]
+led[13]
+led[14]
+led[15]
+led[1]
+led[2]
+led[3]
+led[4]
+led[5]
+led[6]
+led[7]
+led[8]
+led[9]
+led_dual_g[1]
+led_dual_r[0]
+led_dual_r[1]
+nand_ale
+nand_ce_n
+nand_cle
+nand_d[0]
+nand_d[1]
+nand_d[2]
+nand_d[3]
+nand_d[4]
+nand_d[5]
+nand_d[6]
+nand_d[7]
+nand_re_n
+nand_we_n
+seg[0]
+seg[1]
+seg[2]
+seg[3]
+seg[4]
+seg[5]
+seg[6]
+seg[7]
+seg_csn[0]
+seg_csn[1]
+seg_csn[2]
+seg_csn[3]
+seg_csn[4]
+seg_csn[5]
+seg_csn[6]
+seg_csn[7]
+uart_tx
+vga_b[0]
+vga_b[1]
+vga_b[2]
+vga_b[3]
+vga_g[0]
+vga_g[1]
+vga_g[2]
+vga_g[3]
+vga_hsync
+vga_r[0]
+vga_r[1]
+vga_r[2]
+vga_r[3]
+vga_vsync
+
+ There are 0 ports with no output delay but with a timing clock defined on it or propagating through it
+
+
+7. checking multiple_clock
+--------------------------
+ There are 0 register/latch pins with multiple clocks.
+
+
+8. checking generated_clocks
+----------------------------
+ There are 0 generated clocks that are not connected to a clock source.
+
+
+9. checking loops
+-----------------
+ There are 0 combinational loops in the design.
+
+
+10. checking partial_input_delay
+--------------------------------
+ There are 0 input ports with partial input delay specified.
+
+
+11. checking partial_output_delay
+---------------------------------
+ There are 0 ports with partial output delay specified.
+
+
+12. checking latch_loops
+------------------------
+ There are 0 combinational latch loops in the design through latch input
+
+
