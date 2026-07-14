@@ -1,8 +1,6 @@
 `timescale 1ns / 1ps
 
-// LCD debug display, kept in the same form as lab2/reg_dui/top_display.v.
-// Pages 1..32 show the 32 integer registers, page 33 shows PC, and page 34
-// shows the current instruction word.
+
 module lcd_cpu_display(
     input         clk,
     input         resetn,

@@ -101,9 +101,6 @@ module soc_top #(
     wire [31:0] lcd_test_pc_cur;
     wire [31:0] lcd_test_inst;
 
-    // clk_wiz_0 is the sole fabric clock source.  clk_out1 drives the shared
-    // CPU/memory-control domain, clk_out2 supplies the 100 MHz MIG system
-    // clock, and clk_out3 is reserved for the VGA pixel pipeline.
     clk_wiz_0 u_clk_wiz_0 (
         .clk_out1(cpu_clk_25),
         .clk_out2(ddr_clk_100),
@@ -115,8 +112,6 @@ module soc_top #(
 
     assign clock_reset_n = rst_n && clk_wiz_locked;
 
-    // Assert reset asynchronously and release it only after each clock is
-    // running.  This prevents logic from starting while the MMCM is locking.
     soc_reset_sync u_cpu_reset_sync (
         .clk(cpu_clk_25),
         .arst_n(clock_reset_n),
@@ -264,8 +259,6 @@ module soc_top #(
 
 endmodule
 
-// Reset assertion is immediate.  Release is synchronized locally so every
-// clock domain starts only after clk_wiz_0 reports a stable clock.
 module soc_reset_sync (
     input  wire clk,
     input  wire arst_n,
@@ -302,11 +295,9 @@ module soc_boot_board_control (
     assign ddr_ready = ddr_ready_sync[1];
     assign nand_rdy = nand_rdy_sync[1];
     assign cpu_rst_n = rst_n && ddr_ready && boot_done;
-    // Board R/G net names are physically reversed, so *_r lights green.
     assign led_dual_r = {boot_done, ddr_ready};
     assign led_dual_g = {boot_error, 1'b0};
 
-    // Synchronize asynchronous MIG/NAND readiness into the 25 MHz domain.
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             ddr_ready_sync <= 2'b00;
