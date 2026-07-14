@@ -68,20 +68,27 @@ module fp_mul_s(
 
     wire normal_start = start && !special_case;
 
-    wire        mul_busy;
-    wire        mul_ready;
-    wire [63:0] mant_product_full;
+    reg         mul_valid_s0;
+    reg         mul_valid_s1;
+    reg         mul_valid_s2;
+    reg         mul_ready;
+    (* use_dsp = "yes" *) reg [47:0] mant_product_s0;
+    reg [47:0] mant_product_s1;
+    reg [47:0] mant_product_s2;
+    reg [47:0] mant_product_full;
 
-    booth_wallace u_mant_mul(
-        .clk     (clk),
-        .rst     (rst),
-        .start   (normal_start),
-        .A       ({8'b0, mana_w}),
-        .B       ({8'b0, manb_w}),
-        .busy    (mul_busy),
-        .ready   (mul_ready),
-        .Product (mant_product_full)
-    );
+    wire mul_busy = mul_valid_s0 || mul_valid_s1 || mul_valid_s2;
+
+    always @(posedge clk) begin
+        if (normal_start)
+            mant_product_s0 <= mana_w * manb_w;
+        if (mul_valid_s0)
+            mant_product_s1 <= mant_product_s0;
+        if (mul_valid_s1)
+            mant_product_s2 <= mant_product_s1;
+        if (mul_valid_s2)
+            mant_product_full <= mant_product_s2;
+    end
 
     reg               special_ready_r;
     reg [31:0]        special_result_r;
@@ -91,18 +98,23 @@ module fp_mul_s(
     wire [31:0] normal_result;
     wire        finish_exc_of;
     wire        finish_exc_uf;
+    wire        finish_ready;
 
     fp_mul_s_finish u_finish(
+        .clk      (clk),
+        .rst      (rst),
+        .start    (mul_ready),
         .sign_res (sign_res_r),
         .exp_base (exp_res_r),
-        .product  (mant_product_full[47:0]),
+        .product  (mant_product_full),
+        .ready    (finish_ready),
         .R        (normal_result),
         .exc_of   (finish_exc_of),
         .exc_uf   (finish_exc_uf)
     );
 
-    assign busy   = mul_busy;
-    assign ready  = special_ready_r || mul_ready;
+    assign busy   = mul_busy || mul_ready;
+    assign ready  = special_ready_r || finish_ready;
     assign R      = special_ready_r ? special_result_r : normal_result;
     assign exc_of = special_ready_r ? 1'b0 : finish_exc_of;
     assign exc_uf = special_ready_r ? 1'b0 : finish_exc_uf;
@@ -113,9 +125,17 @@ module fp_mul_s(
             special_result_r <= 32'b0;
             sign_res_r       <= 1'b0;
             exp_res_r        <= 11'sd0;
+            mul_valid_s0     <= 1'b0;
+            mul_valid_s1     <= 1'b0;
+            mul_valid_s2     <= 1'b0;
+            mul_ready        <= 1'b0;
         end
         else begin
             special_ready_r <= 1'b0;
+            mul_valid_s0    <= normal_start;
+            mul_valid_s1    <= mul_valid_s0;
+            mul_valid_s2    <= mul_valid_s1;
+            mul_ready       <= mul_valid_s2;
 
             if (start) begin
                 if (special_case) begin
@@ -137,20 +157,32 @@ endmodule
 
 
 module fp_mul_s_finish(
+    input               clk,
+    input               rst,
+    input               start,
     input               sign_res,
     input signed [10:0] exp_base,
     input        [47:0] product,
+    output reg          ready,
     output reg   [31:0] R,
     output reg          exc_of,
     output reg          exc_uf
 );
 
-    reg [47:0] product_norm;
-    reg signed [10:0] exp_res;
-    reg [26:0] mant_res;
+    reg [47:0] product_norm_w;
+    reg signed [10:0] exp_norm_w;
+    reg [26:0] mant_norm_w;
+    reg        product_zero_w;
+    reg [5:0]  shift_num_w;
+
+    reg               sign_norm_r;
+    reg signed [10:0] exp_norm_r;
+    reg        [26:0] mant_norm_r;
+    reg               product_zero_r;
+
+    reg signed [10:0] exp_round;
     reg [24:0] rounded;
     reg        round_inc;
-    reg [5:0]  shift_num;
 
     function [5:0] clz48;
         input [47:0] x;
@@ -213,71 +245,98 @@ module fp_mul_s_finish(
         end
     endfunction
 
+    // Stage 1: normalize the multiplier product and adjust the exponent.
     always @(*) begin
-        exp_res      = exp_base;
-        product_norm = product;
-        mant_res     = 27'b0;
-        rounded      = 25'b0;
-        round_inc    = 1'b0;
-        shift_num    = 6'd0;
-        R            = 32'b0;
-        exc_of       = 1'b0;
-        exc_uf       = 1'b0;
+        product_norm_w = product;
+        exp_norm_w     = exp_base;
+        mant_norm_w    = 27'b0;
+        product_zero_w = (product == 48'b0);
+        shift_num_w    = 6'd0;
 
-        if (product == 48'b0) begin
-            R = {sign_res, 31'b0};
-        end
-        else begin
+        if (product != 48'b0) begin
             if (product[47]) begin
-                mant_res = {
+                mant_norm_w = {
                     product[47:24],
                     product[23],
                     product[22],
                     |product[21:0]
                 };
 
-                exp_res = exp_res + 11'sd1;
+                exp_norm_w = exp_base + 11'sd1;
             end
             else begin
-                shift_num    = clz48(product) - 6'd1;
-                product_norm = product << shift_num;
-                exp_res      = exp_res - $signed({5'b0, shift_num});
+                shift_num_w    = clz48(product) - 6'd1;
+                product_norm_w = product << shift_num_w;
+                exp_norm_w     = exp_base - $signed({5'b0, shift_num_w});
 
-                mant_res = {
-                    product_norm[46:23],
-                    product_norm[22],
-                    product_norm[21],
-                    |product_norm[20:0]
+                mant_norm_w = {
+                    product_norm_w[46:23],
+                    product_norm_w[22],
+                    product_norm_w[21],
+                    |product_norm_w[20:0]
                 };
             end
+        end
+    end
 
-            if (exp_res <= 0) begin
-                R      = {sign_res, 31'b0};
-                exc_uf = 1'b1;
+    always @(posedge clk or negedge rst) begin
+        if (!rst) begin
+            ready          <= 1'b0;
+            sign_norm_r    <= 1'b0;
+            exp_norm_r     <= 11'sd0;
+            mant_norm_r    <= 27'b0;
+            product_zero_r <= 1'b1;
+        end
+        else begin
+            ready <= start;
+
+            if (start) begin
+                sign_norm_r    <= sign_res;
+                exp_norm_r     <= exp_norm_w;
+                mant_norm_r    <= mant_norm_w;
+                product_zero_r <= product_zero_w;
+            end
+        end
+    end
+
+    // Stage 2: round, check exponent range, and pack the IEEE-754 result.
+    always @(*) begin
+        exp_round = exp_norm_r;
+        rounded   = 25'b0;
+        round_inc = 1'b0;
+        R         = 32'b0;
+        exc_of    = 1'b0;
+        exc_uf    = 1'b0;
+
+        if (product_zero_r) begin
+            R = {sign_norm_r, 31'b0};
+        end
+        else if (exp_norm_r <= 0) begin
+            R      = {sign_norm_r, 31'b0};
+            exc_uf = 1'b1;
+        end
+        else begin
+            round_inc =
+                mant_norm_r[2] &
+                (mant_norm_r[1] | mant_norm_r[0] | mant_norm_r[3]);
+
+            rounded = {1'b0, mant_norm_r[26:3]} + round_inc;
+
+            if (rounded[24]) begin
+                rounded   = rounded >> 1;
+                exp_round = exp_norm_r + 11'sd1;
+            end
+
+            if (exp_round >= 11'sd255) begin
+                R      = {sign_norm_r, 8'hff, 23'b0};
+                exc_of = 1'b1;
             end
             else begin
-                round_inc =
-                    mant_res[2] &
-                    (mant_res[1] | mant_res[0] | mant_res[3]);
-
-                rounded = {1'b0, mant_res[26:3]} + round_inc;
-
-                if (rounded[24]) begin
-                    rounded = rounded >> 1;
-                    exp_res = exp_res + 11'sd1;
-                end
-
-                if (exp_res >= 11'sd255) begin
-                    R      = {sign_res, 8'hff, 23'b0};
-                    exc_of = 1'b1;
-                end
-                else begin
-                    R = {
-                        sign_res,
-                        exp_res[7:0],
-                        rounded[22:0]
-                    };
-                end
+                R = {
+                    sign_norm_r,
+                    exp_round[7:0],
+                    rounded[22:0]
+                };
             end
         end
     end
