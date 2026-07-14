@@ -1,0 +1,50 @@
+Copyright 1986-2019 Xilinx, Inc. All Rights Reserved.
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+| Tool Version : Vivado v.2019.2 (win64) Build 2708876 Wed Nov  6 21:40:23 MST 2019
+| Date         : Tue Jul 14 19:50:18 2026
+| Host         : LAPTOP-LIUXX running 64-bit major release  (build 9200)
+| Command      : report_utilization -cells [get_cells u_cpu] -hierarchical -hierarchical_depth 5 -file C:/Users/liuxx/Desktop/small_term/waterflow_CPU/reports/cpu_utilization_hier_latest.rpt
+| Design       : soc_top
+| Device       : 7a200tfbg676-1
+| Design State : Routed
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+Utilization Design Information
+
+Table of Contents
+-----------------
+1. Utilization by Hierarchy
+
+1. Utilization by Hierarchy
+---------------------------
+
++------------------------+-----------------+------------+------------+---------+------+-------+--------+--------+--------------+
+|        Instance        |      Module     | Total LUTs | Logic LUTs | LUTRAMs | SRLs |  FFs  | RAMB36 | RAMB18 | DSP48 Blocks |
++------------------------+-----------------+------------+------------+---------+------+-------+--------+--------+--------------+
+| u_cpu                  |             CPU |      14000 |      14000 |       0 |    0 | 20232 |      0 |      0 |            0 |
+|   u_cpu                |             CPU |      14000 |      14000 |       0 |    0 | 20232 |      0 |      0 |            0 |
+|     (u_cpu)            |             CPU |       1220 |       1220 |       0 |    0 |  1264 |      0 |      0 |            0 |
+|     u_bpu              |             BPU |       5156 |       5156 |       0 |    0 | 14592 |      0 |      0 |            0 |
+|     u_csr              |         CSRFile |        466 |        466 |       0 |    0 |   309 |      0 |      0 |            0 |
+|     u_exu              |             EXU |       4465 |       4465 |       0 |    0 |  1597 |      0 |      0 |            0 |
+|       (u_exu)          |             EXU |         46 |         46 |       0 |    0 |    37 |      0 |      0 |            0 |
+|       u_fpu            |             FPU |       1840 |       1840 |       0 |    0 |   633 |      0 |      0 |            0 |
+|         (u_fpu)        |             FPU |          1 |          1 |       0 |    0 |     1 |      0 |      0 |            0 |
+|         u_fp_add_s     |        fp_add_s |        562 |        562 |       0 |    0 |   221 |      0 |      0 |            0 |
+|         u_fp_mul_s     |        fp_mul_s |       1279 |       1279 |       0 |    0 |   411 |      0 |      0 |            0 |
+|           (u_fp_mul_s) |        fp_mul_s |         24 |         24 |       0 |    0 |    15 |      0 |      0 |            0 |
+|           u_finish     | fp_mul_s_finish |         10 |         10 |       0 |    0 |     0 |      0 |      0 |            0 |
+|           u_mant_mul   | booth_wallace_1 |       1246 |       1246 |       0 |    0 |   396 |      0 |      0 |            0 |
+|       u_mdu            |             MDU |       2581 |       2581 |       0 |    0 |   927 |      0 |      0 |            0 |
+|         (u_mdu)        |             MDU |          1 |          1 |       0 |    0 |   100 |      0 |      0 |            0 |
+|         u_diver        |           diver |       1057 |       1057 |       0 |    0 |   202 |      0 |      0 |            0 |
+|         u_mul_pipe     |   booth_wallace |       1525 |       1525 |       0 |    0 |   625 |      0 |      0 |            0 |
+|     u_freg             |      freg_32bit |        609 |        609 |       0 |    0 |  1024 |      0 |      0 |            0 |
+|     u_ifu              |             IFU |        549 |        549 |       0 |    0 |   382 |      0 |      0 |            0 |
+|     u_imm              |          ImmGen |         50 |         50 |       0 |    0 |     0 |      0 |      0 |            0 |
+|     u_lsu              |             LSU |        596 |        596 |       0 |    0 |    40 |      0 |      0 |            0 |
+|     u_reg              |       reg_32bit |        898 |        898 |       0 |    0 |  1024 |      0 |      0 |            0 |
++------------------------+-----------------+------------+------------+---------+------+-------+--------+--------+--------------+
+* Note: The sum of lower-level cells may be larger than their parent cells total, due to cross-hierarchy LUT combining
+
+

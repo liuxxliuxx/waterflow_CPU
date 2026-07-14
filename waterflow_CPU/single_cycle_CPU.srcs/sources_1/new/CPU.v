@@ -54,11 +54,9 @@ module CPU(
     wire        bpu_pred_taken_raw;
     wire [31:0] bpu_pred_target_raw;
 
-    wire [31:0] bpu_query_pc =
-        inst_resp_valid ? inst_req_vaddr : if_pc;
+    wire [31:0] bpu_query_pc;
 
-    wire [31:0] bpu_query_inst =
-        inst_resp_valid ? inst_resp_data : if_inst;
+    wire [31:0] bpu_query_inst;
 
     wire        pred_taken;
     wire [31:0] pred_target;
@@ -234,6 +232,15 @@ module CPU(
     reg [4:0]  memwb_fp_waddr;
     reg [31:0] memwb_fp_wdata;
 
+    reg mem_stall_valid;
+    reg mem_stall_regWr;
+    reg [4:0]mem_stall_waddr;
+    reg [31:0]mem_stall_wdata;
+    reg mem_stall_FpRegWr;
+    reg [4:0]mem_stall_fp_waddr;
+    reg [31:0]mem_stall_fp_wdata;
+    reg mem_true_use;
+
 
 
     wire if_pc_unalign = if_valid && (if_pc[1:0] != 2'b00);
@@ -276,7 +283,10 @@ module CPU(
 
         .inst_resp_valid(inst_resp_valid),
         .inst_resp_data(inst_resp_data),
-        .inst_resp_err(inst_resp_err)
+        .inst_resp_err(inst_resp_err),
+        
+        .bpu_query_pc(bpu_query_pc),
+        .bpu_query_inst(bpu_query_inst)
     );
 
     wire        bpu_update_valid;
@@ -670,6 +680,7 @@ module CPU(
         end
         else if (mem_stall || ex_stall) begin
             idex_valid <= idex_valid;
+
         end
         else if (load_use_stall || fp_load_use_stall || csr_stall) begin
             idex_valid <= 1'b0;
@@ -775,6 +786,10 @@ module CPU(
     wire [1:0] forwardA;
     wire [1:0] forwardB;
 
+    wire memwb_true_valid = mem_true_use ? mem_stall_valid : memwb_valid;
+    wire memwb_true_regWr = mem_true_use ? mem_stall_regWr : memwb_regWr;
+    wire [4:0] memwb_true_waddr = mem_true_use ? mem_stall_waddr : memwb_waddr;
+
     HazardUnit u_hazard(
         .id_valid(ifid_valid),
         .id_rs1(id_rs1),
@@ -797,9 +812,9 @@ module CPU(
         .exmem_memRd(exmem_MemRd),
         .exmem_regwaddr(exmem_regwaddr),
 
-        .wb_valid(memwb_valid),
-        .wb_regWr(memwb_regWr),
-        .wb_waddr(memwb_waddr),
+        .wb_valid(memwb_true_valid),
+        .wb_regWr(memwb_true_regWr),
+        .wb_waddr(memwb_true_waddr),
 
         .load_use_stall(load_use_stall),
         .forwardA(forwardA),
@@ -810,10 +825,12 @@ module CPU(
     reg [31:0] ex_data1;
     reg [31:0] ex_data2;
 
+    wire [31:0] memwb_forward_data = mem_true_use ? mem_stall_wdata : memwb_wdata;
+
     always @(*) begin
         case (forwardA)
             2'd1:    ex_data1 = exmem_forward_data;
-            2'd2:    ex_data1 = memwb_wdata;
+            2'd2:    ex_data1 = memwb_forward_data;
             default: ex_data1 = idex_rdata1;
         endcase
     end
@@ -821,7 +838,7 @@ module CPU(
     always @(*) begin
         case (forwardB)
             2'd1:    ex_data2 = exmem_forward_data;
-            2'd2:    ex_data2 = memwb_wdata;
+            2'd2:    ex_data2 = memwb_forward_data;
             default: ex_data2 = idex_rdata2;
         endcase
     end
@@ -844,6 +861,7 @@ module CPU(
     wire [31:0] ex_gp_to_fp_data;
 
     reg [31:0] exmem_fp_forward_data;
+    wire [31:0] memwb_fp_forward_data = mem_true_use ? mem_stall_fp_wdata : memwb_fp_wdata;
 
     always @(*) begin
         case(exmem_FPWB_Sel)
@@ -875,6 +893,9 @@ module CPU(
     reg [31:0] ex_fp_data1;
     reg [31:0] ex_fp_data2;
 
+    wire memwb_true_FpRegWr = mem_true_use ? mem_stall_FpRegWr  : memwb_FpRegWr;
+    wire [4:0] memwb_true_Fpwaddr = mem_true_use ? mem_stall_fp_waddr : memwb_fp_waddr;
+
     always @(*) begin
         if (idex_valid &&
             idex_FpSrc1Used &&
@@ -886,10 +907,10 @@ module CPU(
         end
         else if (idex_valid &&
                 idex_FpSrc1Used &&
-                memwb_valid &&
-                memwb_FpRegWr &&
-                (memwb_fp_waddr == idex_fp_rs1)) begin
-            ex_fp_data1 = memwb_fp_wdata;
+                memwb_true_valid &&
+                memwb_true_FpRegWr &&
+                (memwb_true_Fpwaddr == idex_fp_rs1)) begin
+            ex_fp_data1 = memwb_fp_forward_data;
         end
         else begin
             ex_fp_data1 = idex_fp_rdata1;
@@ -1454,34 +1475,60 @@ module CPU(
 
     always @(posedge clk or negedge rst) begin
         if (!rst) begin
-            memwb_valid <= 1'd0;
-            memwb_regWr <= 1'd0;
-            memwb_waddr <= 5'd0;
-            memwb_wdata <= 32'd0;
+            memwb_valid     <= 1'd0;
+            memwb_regWr     <= 1'd0;
+            memwb_waddr     <= 5'd0;
+            memwb_wdata     <= 32'd0;
 
             memwb_FpRegWr   <= 1'b0;
             memwb_fp_waddr  <= 5'b0;
             memwb_fp_wdata  <= 32'b0;
+
+            mem_stall_valid         <= 1'd0;
+            mem_stall_regWr         <= 1'd0;
+            mem_stall_waddr         <= 5'd0;
+            mem_stall_wdata         <= 32'd0;
+            mem_stall_FpRegWr       <= 1'b0;
+            mem_stall_fp_waddr      <= 5'b0;
+            mem_stall_fp_wdata      <= 32'b0;
+            mem_true_use <= 1'b0;
         end
         else if (mem_stall) begin
-            memwb_valid <= 1'd0;
-            memwb_regWr <= 1'd0;
-            memwb_waddr <= 5'd0;
-            memwb_wdata <= 32'd0;
-
+            memwb_valid     <= 1'd0;
+            memwb_regWr     <= 1'd0;
+            memwb_waddr     <= 5'd0;
+            memwb_wdata     <= 32'd0;
             memwb_FpRegWr   <= 1'b0;
             memwb_fp_waddr  <= 5'b0;
             memwb_fp_wdata  <= 32'b0;
+
+            mem_stall_valid         <= mem_stall_valid   ;
+            mem_stall_regWr         <= mem_stall_regWr   ;
+            mem_stall_waddr         <= mem_stall_waddr   ;
+            mem_stall_wdata         <= mem_stall_wdata   ;
+            mem_stall_FpRegWr       <= mem_stall_FpRegWr ;
+            mem_stall_fp_waddr      <= mem_stall_fp_waddr;
+            mem_stall_fp_wdata      <= mem_stall_fp_wdata;
+            mem_true_use <= 1'b1;
         end
         else begin
-            memwb_valid <= mem_can_commit;
-            memwb_regWr <= mem_can_commit && exmem_regWr;
-            memwb_waddr <= exmem_regwaddr;
-            memwb_wdata <= mem_stage_wdata;
+            memwb_valid    <= mem_can_commit;
+            memwb_regWr    <= mem_can_commit && exmem_regWr;
+            memwb_waddr    <= exmem_regwaddr;
+            memwb_wdata    <= mem_stage_wdata;
 
             memwb_FpRegWr  <= mem_can_commit && exmem_FpRegWr;
             memwb_fp_waddr <= exmem_fp_waddr;
             memwb_fp_wdata <= fp_mem_stage_wdata;
+
+            mem_stall_valid         <= mem_can_commit;
+            mem_stall_regWr         <= mem_can_commit && exmem_regWr;
+            mem_stall_waddr         <= exmem_regwaddr;
+            mem_stall_wdata         <= mem_stage_wdata;
+            mem_stall_FpRegWr       <= mem_can_commit && exmem_FpRegWr;
+            mem_stall_fp_waddr      <= exmem_fp_waddr;
+            mem_stall_fp_wdata      <= fp_mem_stage_wdata;
+            mem_true_use <= 1'b0;
         end
     end
 

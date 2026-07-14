@@ -55,7 +55,7 @@ module CSRFile(
     assign csr_eentry   = csr_eentry_reg;
     assign csr_era      = csr_era_reg;
 
-    // 简化：CRMD[2] 作为 IE，全局中断使能
+    // CRMD[2] 作为全局中断使能
     // ECFG[12:0] 为局部中断使能
     // ESTAT[12:0] 为中断 pending
     assign has_int = csr_crmd[2] && (|(csr_estat[12:0] & csr_ecfg[12:0]));
@@ -153,7 +153,7 @@ module CSRFile(
             // timer
             if (timer_en) begin
                 if (csr_tval == 32'b0) begin
-                    csr_estat[11] <= 1'b1;  // timer interrupt pending
+                    csr_estat[11] <= 1'b1;  // 定时器中断pending
 
                     if (timer_periodic)
                         csr_tval <= {tcfg_init, 2'b0};

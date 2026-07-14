@@ -1,10 +1,10 @@
 -- Copyright 1986-2019 Xilinx, Inc. All Rights Reserved.
 -- --------------------------------------------------------------------------------
 -- Tool Version: Vivado v.2019.2 (win64) Build 2708876 Wed Nov  6 21:40:23 MST 2019
--- Date        : Sat Jul 11 19:04:20 2026
--- Host        : DESKTOP-G1NJMEK running 64-bit major release  (build 9200)
--- Command     : write_vhdl -force -mode funcsim {C:/Users/hk/Desktop/summer
---               practice/xiaoxueqi/waterflow_CPU/waterflow_CPU/single_cycle_CPU.srcs/sources_1/ip/clk_wiz_0/clk_wiz_0_sim_netlist.vhdl}
+-- Date        : Mon Jul 13 16:50:56 2026
+-- Host        : LAPTOP-LIUXX running 64-bit major release  (build 9200)
+-- Command     : write_vhdl -force -mode funcsim
+--               C:/Users/liuxx/Desktop/small_term/waterflow_CPU/waterflow_CPU/single_cycle_CPU.srcs/sources_1/ip/clk_wiz_0/clk_wiz_0_sim_netlist.vhdl
 -- Design      : clk_wiz_0
 -- Purpose     : This VHDL netlist is a functional simulation representation of the design and should not be modified or
 --               synthesized. This netlist cannot be used for SDF annotated simulation.
@@ -98,7 +98,7 @@ mmcm_adv_inst: unisim.vcomponents.MMCME2_ADV
       CLKFBOUT_USE_FINE_PS => false,
       CLKIN1_PERIOD => 10.000000,
       CLKIN2_PERIOD => 0.000000,
-      CLKOUT0_DIVIDE_F => 40.000000,
+      CLKOUT0_DIVIDE_F => 20.000000,
       CLKOUT0_DUTY_CYCLE => 0.500000,
       CLKOUT0_PHASE => 0.000000,
       CLKOUT0_USE_FINE_PS => false,
