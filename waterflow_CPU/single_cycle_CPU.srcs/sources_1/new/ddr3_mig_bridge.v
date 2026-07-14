@@ -27,12 +27,13 @@ module ddr3_mig_bridge #(
     input  wire                         cpu_req_valid,
     output wire                         cpu_req_ready,
     input  wire                         cpu_req_we,
+    input  wire                         cpu_req_line,
     input  wire [3:0]                   cpu_req_wstrb,
     input  wire [31:0]                  cpu_req_addr,
-    input  wire [31:0]                  cpu_req_wdata,
+    input  wire [127:0]                 cpu_req_wdata,
     output reg                          cpu_resp_valid,
     input  wire                         cpu_resp_ready,
-    output reg  [31:0]                  cpu_resp_rdata
+    output reg  [127:0]                 cpu_resp_rdata
 );
     localparam [1:0] S_IDLE      = 2'd0;
     localparam [1:0] S_WRITE     = 2'd1;
@@ -48,7 +49,6 @@ module ddr3_mig_bridge #(
     wire [11:0] device_temp;
 
     reg [1:0] state;
-    reg [1:0] word_sel_q;
     reg       cmd_accepted;
     reg       wdf_accepted;
 
@@ -130,11 +130,10 @@ module ddr3_mig_bridge #(
     always @(posedge ui_clk) begin
         if (ui_clk_sync_rst) begin
             state <= S_IDLE;
-            word_sel_q <= 2'b00;
             cmd_accepted <= 1'b0;
             wdf_accepted <= 1'b0;
             cpu_resp_valid <= 1'b0;
-            cpu_resp_rdata <= 32'h0;
+            cpu_resp_rdata <= 128'h0;
             app_addr <= 27'd0;
             app_cmd <= CMD_WRITE;
             app_wdf_data <= 128'h0;
@@ -149,21 +148,20 @@ module ddr3_mig_bridge #(
                     cmd_accepted <= 1'b0;
                     wdf_accepted <= 1'b0;
                     if (req_fire) begin
-                        // With x16 DDR3, BL8 and a 128-bit application port,
-                        // one 16-byte application beat advances app_addr by 8
-                        // (the native address unit is one x16 memory word).
-                        // The old [28:4]+2'b00 mapping advanced by only 4, so
-                        // adjacent CPU cache lines overlapped in real DDR.
                         app_addr <= {1'b0, cpu_req_addr[26:4], 3'b000};
                         app_cmd <= cpu_req_we ? CMD_WRITE : CMD_READ;
-                        app_wdf_data <= {4{cpu_req_wdata}};
-                        word_sel_q <= cpu_req_addr[3:2];
-                        case (cpu_req_addr[3:2])
-                            2'd0: app_wdf_mask <= {12'hfff, ~cpu_req_wstrb};
-                            2'd1: app_wdf_mask <= {8'hff, ~cpu_req_wstrb, 4'hf};
-                            2'd2: app_wdf_mask <= {4'hf, ~cpu_req_wstrb, 8'hff};
-                            default: app_wdf_mask <= {~cpu_req_wstrb, 12'hfff};
-                        endcase
+                        if (cpu_req_we && cpu_req_line) begin
+                            app_wdf_data <= cpu_req_wdata;
+                            app_wdf_mask <= 16'h0000;
+                        end else begin
+                            app_wdf_data <= {4{cpu_req_wdata[31:0]}};
+                            case (cpu_req_addr[3:2])
+                                2'd0: app_wdf_mask <= {12'hfff, ~cpu_req_wstrb};
+                                2'd1: app_wdf_mask <= {8'hff, ~cpu_req_wstrb, 4'hf};
+                                2'd2: app_wdf_mask <= {4'hf, ~cpu_req_wstrb, 8'hff};
+                                default: app_wdf_mask <= {~cpu_req_wstrb, 12'hfff};
+                            endcase
+                        end
                         state <= cpu_req_we ? S_WRITE : S_READ_CMD;
                     end
                 end
@@ -179,7 +177,7 @@ module ddr3_mig_bridge #(
                     if ((cmd_accepted || cmd_fire) &&
                         (wdf_accepted || wdf_fire)) begin
                         cpu_resp_valid <= 1'b1;
-                        cpu_resp_rdata <= 32'h0;
+                        cpu_resp_rdata <= 128'h0;
                         state <= S_IDLE;
                     end
                 end
@@ -192,12 +190,7 @@ module ddr3_mig_bridge #(
 
                 S_READ_WAIT: begin
                     if (app_rd_data_valid) begin
-                        case (word_sel_q)
-                            2'd0: cpu_resp_rdata <= app_rd_data[31:0];
-                            2'd1: cpu_resp_rdata <= app_rd_data[63:32];
-                            2'd2: cpu_resp_rdata <= app_rd_data[95:64];
-                            default: cpu_resp_rdata <= app_rd_data[127:96];
-                        endcase
+                        cpu_resp_rdata <= app_rd_data;
                         cpu_resp_valid <= 1'b1;
                         state <= S_IDLE;
                     end

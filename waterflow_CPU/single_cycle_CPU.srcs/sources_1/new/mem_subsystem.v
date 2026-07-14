@@ -135,7 +135,7 @@ module mem_subsystem #(
     wire i_cache_mem_req_ready;
     wire [31:0] i_cache_mem_req_addr;
     wire i_cache_mem_resp_valid;
-    wire [31:0] i_cache_mem_resp_rdata;
+    wire [127:0] i_cache_mem_resp_rdata;
 
     wire d_cache_req_valid = d_req_valid && !d_addr_exc && !d_is_mmio && d_resp_room;
     wire d_cache_req_ready;
@@ -145,11 +145,12 @@ module mem_subsystem #(
     wire d_cache_mem_req_valid;
     wire d_cache_mem_req_ready;
     wire d_cache_mem_req_we;
+    wire d_cache_mem_req_line;
     wire [3:0] d_cache_mem_req_wstrb;
     wire [31:0] d_cache_mem_req_addr;
-    wire [31:0] d_cache_mem_req_wdata;
+    wire [127:0] d_cache_mem_req_wdata;
     wire d_cache_mem_resp_valid;
-    wire [31:0] d_cache_mem_resp_rdata;
+    wire [127:0] d_cache_mem_resp_rdata;
 
     wire boot_mem_sel = boot_req_valid;
     wire d_cache_mem_sel = d_cache_mem_req_valid && !boot_mem_sel;
@@ -160,28 +161,30 @@ module mem_subsystem #(
     wire bridge_req_fire = bridge_req_valid && bridge_req_ready;
     wire bridge_req_we = boot_mem_sel ? boot_req_we :
                          (d_cache_mem_sel ? d_cache_mem_req_we : 1'b0);
+    wire bridge_req_line = d_cache_mem_sel && d_cache_mem_req_line;
     wire [3:0] bridge_req_wstrb = boot_mem_sel ? boot_req_wstrb :
                                   (d_cache_mem_sel ? d_cache_mem_req_wstrb : 4'b0000);
     wire [31:0] bridge_req_addr = boot_mem_sel ? boot_req_addr :
                                   (d_cache_mem_sel ? d_cache_mem_req_addr : i_cache_mem_req_addr);
-    wire [31:0] bridge_req_wdata = boot_mem_sel ? boot_req_wdata :
-                                   (d_cache_mem_sel ? d_cache_mem_req_wdata : 32'h0);
+    wire [127:0] bridge_req_wdata = boot_mem_sel ? {4{boot_req_wdata}} :
+                                    (d_cache_mem_sel ? d_cache_mem_req_wdata : 128'h0);
     wire bridge_resp_valid;
-    wire [31:0] bridge_resp_rdata;
+    wire [127:0] bridge_resp_rdata;
     wire ddr_req_valid;
     wire ddr_req_ready;
     wire ddr_req_we;
+    wire ddr_req_line;
     wire [3:0] ddr_req_wstrb;
     wire [31:0] ddr_req_addr;
-    wire [31:0] ddr_req_wdata;
+    wire [127:0] ddr_req_wdata;
     wire ddr_resp_valid;
-    wire [31:0] ddr_resp_rdata;
+    wire [127:0] ddr_resp_rdata;
 
     assign d_cache_mem_req_ready = d_cache_mem_sel && bridge_req_ready;
     assign i_cache_mem_req_ready = i_cache_mem_sel && bridge_req_ready;
     assign boot_req_ready = boot_mem_sel && bridge_req_ready;
     assign boot_resp_valid = bridge_resp_valid && bridge_resp_is_boot;
-    assign boot_resp_rdata = bridge_resp_rdata;
+    assign boot_resp_rdata = bridge_resp_rdata[31:0];
     assign d_cache_mem_resp_valid = bridge_resp_valid && !bridge_resp_is_i &&
                                     !bridge_resp_is_boot && !bridge_resp_is_write;
     assign i_cache_mem_resp_valid = bridge_resp_valid && bridge_resp_is_i && !bridge_resp_is_write;
@@ -287,6 +290,7 @@ module mem_subsystem #(
         .mem_req_valid(d_cache_mem_req_valid),
         .mem_req_ready(d_cache_mem_req_ready),
         .mem_req_we(d_cache_mem_req_we),
+        .mem_req_line(d_cache_mem_req_line),
         .mem_req_wstrb(d_cache_mem_req_wstrb),
         .mem_req_addr(d_cache_mem_req_addr),
         .mem_req_wdata(d_cache_mem_req_wdata),
@@ -300,6 +304,7 @@ module mem_subsystem #(
         .src_req_valid(bridge_req_valid),
         .src_req_ready(bridge_req_ready),
         .src_req_we(bridge_req_we),
+        .src_req_line(bridge_req_line),
         .src_req_wstrb(bridge_req_wstrb),
         .src_req_addr(bridge_req_addr),
         .src_req_wdata(bridge_req_wdata),
@@ -311,6 +316,7 @@ module mem_subsystem #(
         .dst_req_valid(ddr_req_valid),
         .dst_req_ready(ddr_req_ready),
         .dst_req_we(ddr_req_we),
+        .dst_req_line(ddr_req_line),
         .dst_req_wstrb(ddr_req_wstrb),
         .dst_req_addr(ddr_req_addr),
         .dst_req_wdata(ddr_req_wdata),
@@ -341,6 +347,7 @@ module mem_subsystem #(
         .cpu_req_valid(ddr_req_valid),
         .cpu_req_ready(ddr_req_ready),
         .cpu_req_we(ddr_req_we),
+        .cpu_req_line(ddr_req_line),
         .cpu_req_wstrb(ddr_req_wstrb),
         .cpu_req_addr(ddr_req_addr),
         .cpu_req_wdata(ddr_req_wdata),

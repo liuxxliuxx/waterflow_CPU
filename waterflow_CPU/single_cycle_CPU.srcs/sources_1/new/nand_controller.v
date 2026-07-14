@@ -90,7 +90,6 @@ module nand_controller #(
         .read_done(mmio_read_done), .read_error(mmio_read_error)
     );
 
-    // Boot owns the shared reader until boot_done; MMIO owns it afterwards.
     assign engine_req_valid = boot_done ?
                               mmio_read_req_valid : boot_read_req_valid;
     assign engine_word_index = boot_done ?

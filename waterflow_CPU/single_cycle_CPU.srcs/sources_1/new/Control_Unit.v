@@ -82,18 +82,21 @@ module Control_Unit(
     wire slli_w = (inst[31:15] == 17'h00081);
     wire srli_w = (inst[31:15] == 17'h00089);
     wire srai_w = (inst[31:15] == 17'h00091);
+
+    wire ext_w_h = (inst[31:10] == 22'h000016);//rj[15:0]符号扩展�??32�??
+    wire ext_w_b = (inst[31:10] == 22'h000017);//rj[7:0]符号扩展�??32�??
+
+    wire clo_w   = (inst[31:10] == 22'h000004);//rj从高位开始连�??0的个�??
+    wire clz_w   = (inst[31:10] == 22'h000005);//rj从低位开始连�??0的个�??
+    wire cto_w   = (inst[31:10] == 22'h000006);//rj从高位开始连�??1的个�??
+    wire ctz_w   = (inst[31:10] == 22'h000007);//rj从低位开始连�??1的个�??
     
-    wire ext_w_h= (inst[31:15] == 17'h00002);//rj[15:0]符号扩展�??32�??
-    wire ext_w_b= (inst[31:15] == 17'h00003);//rj[7:0]符号扩展�??32�??
-    wire clz_w  = (inst[31:15] == 17'h00004);//rj从高位开始连�??0的个�??
-    wire ctz_w  = (inst[31:15] == 17'h00005);//rj从低位开始连�??0的个�??
-    wire clo_w  = (inst[31:15] == 17'h00006);//rj从高位开始连�??1的个�??
-    wire cto_w  = (inst[31:15] == 17'h00007);//rj从低位开始连�??1的个�??
+    
 
     wire cpucfg = (inst[31:15] == 17'h0000b);//读CPU配置寄存�??
 
-    wire maskeqz= (inst[31:15] == 17'h00070);//如果rk==0�??0，否则写rj
-    wire masknez= (inst[31:15] == 17'h00071);//如果rk!=0�??0，否则写rj
+    wire maskeqz= (inst[31:15] == 17'h00026);//如果rk==0�??0，否则写rj
+    wire masknez= (inst[31:15] == 17'h00027);//如果rk!=0�??0，否则写rj
 
     wire break_ = (inst[31:15] == 17'h00054);//断点异常
     wire syscall= (inst[31:15] == 17'h00056);//系统调用，触发系统异�??
