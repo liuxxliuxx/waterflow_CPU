@@ -17,8 +17,8 @@ module BPU(
     input             update_is_jirl
     );
 
-    localparam INDEX_BITS = 8;
-    localparam ENTRY_NUM  = 256;
+    localparam INDEX_BITS = 6;
+    localparam ENTRY_NUM  = 64;
     localparam TAG_WIDTH  = 32-INDEX_BITS-2;
 
     wire [INDEX_BITS-1:0] if_idx = if_pc[INDEX_BITS+1:2];
@@ -89,8 +89,6 @@ module BPU(
             for(i = 0; i<ENTRY_NUM; i = i + 1) begin
                 bht[i]        <= 2'b01;
                 btb_valid[i]  <= 1'b0;
-                btb_tag[i]    <= {TAG_WIDTH{1'b0}};
-                btb_target[i] <= 32'b0;
             end
         end
         else begin
