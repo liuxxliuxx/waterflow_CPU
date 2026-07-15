@@ -10,6 +10,12 @@ set sim_dir [file join $project_dir single_cycle_CPU.srcs sim_1 new]
 
 open_project $project_path
 
+# Vivado 2019.2 on Windows can truncate absolute file arguments at spaces even
+# when Tcl passes them as a single value.  Add project files from the project
+# directory with space-free relative paths instead.
+set caller_dir [pwd]
+cd $project_dir
+
 foreach project_file [get_files -quiet -all] {
     if {[string match {*boot_image_rom.v} $project_file]} {
         remove_files $project_file
@@ -26,7 +32,8 @@ set cdc_impl_xdc [file join $constr_dir ddr_cdc_impl.xdc]
 foreach xdc_file [list $synth_clock_xdc $board_xdc $cdc_impl_xdc] {
     set xdc_object [get_files -quiet -all "*[file tail $xdc_file]"]
     if {[llength $xdc_object] == 0} {
-        add_files -fileset constrs_1 -norecurse $xdc_file
+        set xdc_relative [file join single_cycle_CPU.srcs constrs_1 new [file tail $xdc_file]]
+        add_files -fileset constrs_1 -norecurse $xdc_relative
         set xdc_object [get_files -quiet -all "*[file tail $xdc_file]"]
     }
     if {[llength $xdc_object] != 1} {
@@ -51,7 +58,7 @@ puts "PROJECT_CONSTRAINTS [get_files -of_objects [get_filesets constrs_1]]"
 foreach file_name {ddr_cdc_bridge.v nand_boot_loader.v sevenseg_scan.v soc_top.v} {
     set file_path [file join $rtl_dir $file_name]
     if {[llength [get_files -quiet $file_path]] == 0} {
-        add_files -norecurse $file_path
+        add_files -norecurse [file join single_cycle_CPU.srcs sources_1 new $file_name]
     }
 }
 
@@ -74,7 +81,7 @@ foreach file_name {
 } {
     set file_path [file join $sim_dir $file_name]
     if {[llength [get_files -quiet $file_path]] == 0} {
-        add_files -fileset sim_1 -norecurse $file_path
+        add_files -fileset sim_1 -norecurse [file join single_cycle_CPU.srcs sim_1 new $file_name]
     }
 }
 
@@ -82,5 +89,6 @@ set_property top soc_top [get_filesets sources_1]
 set_property top nand_boot_loader_tb [get_filesets sim_1]
 update_compile_order -fileset sources_1
 update_compile_order -fileset sim_1
+cd $caller_dir
 close_project
 puts "SOC_PROJECT_UPDATE_PASS"
