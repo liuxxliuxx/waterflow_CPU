@@ -85,9 +85,9 @@ module CPU(
 
     wire        ertn_commit;
     wire        mem_can_commit;
+    wire [13:0] csr_actual_raddr;
 
 
-    reg        llbit;
     reg [31:0] lladdr;
 
 
@@ -169,8 +169,6 @@ module CPU(
     reg [31:0] idex_csr_rdata;
 
     reg        idex_ertn;
-    reg        idex_isll;
-    reg        idex_issc;
     reg        idex_rdtime_inst;
     reg        idex_rdtime_high;
     reg [31:0] idex_timer_data;
@@ -210,9 +208,8 @@ module CPU(
 
     reg        exmem_ertn;
 
-    reg        exmem_isll;
-    reg        exmem_issc;
-    reg        exmem_sc_success;
+
+
 
     reg [31:0] exmem_timer_data; 
 
@@ -435,8 +432,7 @@ module CPU(
 
     wire id_rdtime_tid_only;
 
-    wire        id_issc;
-    wire        id_isll;
+
 
     Control_Unit u_ctrl(
         .inst(id_inst),
@@ -487,25 +483,28 @@ module CPU(
         .FpSrc2Used(id_FpSrc2Used),
 
         .WB_Sel(id_WB_Sel),
-        .FPWB_Sel(id_FPWB_Sel),
+        .FPWB_Sel(id_FPWB_Sel)
 
-        .issc(id_issc),
-        .isll(id_isll)
     );
 
 
     wire csr_plv_is_user = 1'b0; 
-    // 如果你暂时不做用户态，先写 0。
-    // 后面可以从 CSRFile 输出 csr_crmd_plv。
-    assign csr_stall = ifid_valid && (id_csr_en || id_rdtime_tid_only) && ((idex_valid && idex_csr_we) || (exmem_valid && exmem_csr_we));
+    
+    assign csr_stall = ifid_valid && (id_csr_en || id_rdtime_tid_only) && 
+                                ((idex_valid &&
+                                idex_csr_we &&
+                                idex_csr_num == csr_actual_raddr) ||
+
+                                (exmem_valid &&
+                                exmem_csr_we &&
+                                exmem_csr_num == csr_actual_raddr));
 
     wire id_exc_ine = ifid_valid && !ifid_exc_valid && !id_inst_valid;
     wire id_exc_sys = ifid_valid && !ifid_exc_valid && id_trap_sys;
     wire id_exc_brk = ifid_valid && !ifid_exc_valid && id_trap_brk;
     wire id_exc_ipe = ifid_valid && !ifid_exc_valid && id_need_priv && csr_plv_is_user;
 
-    // 中断也可以当成 ID 阶段异常处理。
-    // 注意中断应该发生在指令边界，这样比较简单。
+    
     wire id_exc_int = ifid_valid && !ifid_exc_valid && csr_has_int;
 
     reg        id_exc_valid;
@@ -644,8 +643,7 @@ module CPU(
             idex_csr_en    <= 1'b0;
             idex_csr_we    <= 1'b0;
             idex_ertn      <= 1'b0;
-            idex_isll      <= 1'b0;
-            idex_issc      <= 1'b0;
+            
             idex_rdtime_inst <= 1'b0;
 
             idex_FpRegWr      <= 1'b0;
@@ -672,8 +670,7 @@ module CPU(
             idex_csr_en      <= 1'b0;
             idex_csr_we      <= 1'b0;
             idex_ertn        <= 1'b0;
-            idex_isll        <= 1'b0;
-            idex_issc        <= 1'b0;
+            
             idex_rdtime_inst <= 1'b0;
 
             idex_FpRegWr    <= 1'b0;
@@ -698,8 +695,7 @@ module CPU(
             idex_csr_en      <= 1'b0;
             idex_csr_we      <= 1'b0;
             idex_ertn        <= 1'b0;
-            idex_isll        <= 1'b0;
-            idex_issc        <= 1'b0;
+            
             idex_rdtime_inst <= 1'b0;
 
             idex_FpRegWr    <= 1'b0;
@@ -757,9 +753,7 @@ module CPU(
 
             idex_ertn         <= ifid_valid && (id_specop == `SP_ERTN) && !id_exc_valid;
 
-            // LL/SC
-            idex_isll         <= ifid_valid && id_isll && !id_exc_valid;
-            idex_issc         <= ifid_valid && id_issc && !id_exc_valid;
+
 
             // rdtime
             idex_rdtime_inst  <= ifid_valid && id_rdtime_inst && !id_exc_valid;
@@ -1013,9 +1007,6 @@ module CPU(
                 exmem_forward_data = exmem_timer_data;
             end
 
-            `WB_SC: begin
-                exmem_forward_data = exmem_sc_success ? 32'd1 : 32'd0;
-            end
 
             `WB_FPR: begin
                 exmem_forward_data = exmem_fp_to_gp_data;
@@ -1064,7 +1055,7 @@ module CPU(
     assign bpu_update_is_jirl = ex_branch_jirl;
 
 
-    wire [13:0] csr_actual_raddr = id_rdtime_tid_only ? `CSR_TID : id_csr_num;
+    assign csr_actual_raddr = id_rdtime_tid_only ? `CSR_TID : id_csr_num;
 
     CSRFile u_csr(
         .clk(clk),
@@ -1114,9 +1105,6 @@ module CPU(
             exmem_csr_en    <= 1'b0;
             exmem_csr_we    <= 1'b0;
             exmem_ertn      <= 1'b0;
-            exmem_isll      <= 1'b0;
-            exmem_issc      <= 1'b0;
-            exmem_sc_success <= 1'b0;
 
             exmem_pc            <= 32'b0;
             exmem_exc_ecode     <= 6'b0;
@@ -1225,22 +1213,6 @@ module CPU(
                           idex_ertn &&
                           !(idex_exc_valid || ex_stage_exc_valid);
 
-            exmem_isll <= idex_valid &&
-                          ex_res_valid &&
-                          idex_isll &&
-                          !(idex_exc_valid || ex_stage_exc_valid);
-
-            exmem_issc <= idex_valid &&
-                          ex_res_valid &&
-                          idex_issc &&
-                          !(idex_exc_valid || ex_stage_exc_valid);
-
-            exmem_sc_success <= idex_valid &&
-                                ex_res_valid &&
-                                idex_issc &&
-                                llbit &&
-                                (lladdr == ex_res) &&
-                                !(idex_exc_valid || ex_stage_exc_valid);
 
             exmem_timer_data <= idex_timer_data;
 
@@ -1266,11 +1238,9 @@ module CPU(
 
     wire memwb_accept = exmem_valid && lsu_mem_ready;
 
-    wire lsu_mem_en = exmem_MemEn &&
-                  (!exmem_issc || exmem_sc_success);
+    wire lsu_mem_en = exmem_MemEn;
 
-    wire lsu_mem_wr = exmem_MemWr &&
-                    (!exmem_issc || exmem_sc_success);
+    wire lsu_mem_wr = exmem_MemWr;
 
     LSU u_lsu(
         .clk(clk),
@@ -1400,10 +1370,6 @@ module CPU(
                 mem_stage_wdata = exmem_fp_to_gp_data;
             end
 
-            `WB_SC: begin
-                // LL/SC 还没做，先临时返回 1
-                mem_stage_wdata = exmem_sc_success ? 32'd1 : 32'd0;
-            end
 
             `WB_CPUCFG: begin
                 // 如果 ALU_CPUCFG 已经在 ALU 里做了，可以直接用 exmem_ex_res
@@ -1449,29 +1415,6 @@ module CPU(
                 fp_mem_stage_wdata = exmem_ex_res;
             end
         endcase
-    end
-
-    always @(posedge clk or negedge rst) begin
-        if (!rst) begin
-            llbit  <= 1'b0;
-            lladdr <= 32'b0;
-        end
-        else if (exc_commit || ertn_commit) begin
-            llbit <= 1'b0;
-        end
-        else if (mem_can_commit) begin
-            if (exmem_isll) begin
-                llbit  <= 1'b1;
-                lladdr <= exmem_ex_res;
-            end
-            else if (exmem_issc) begin
-                llbit <= 1'b0;
-            end
-            else if (exmem_MemWr) begin
-                // 单核简化：普通 store 后也清 LLbit，更保守
-                llbit <= 1'b0;
-            end
-        end
     end
 
 
