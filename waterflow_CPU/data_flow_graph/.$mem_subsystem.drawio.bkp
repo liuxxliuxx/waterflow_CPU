@@ -1,6 +1,6 @@
 <mxfile host="Electron" agent="ChatGPT">
   <diagram id="mem-subsystem-clean-v2" name="mem_subsystem结构图">
-    <mxGraphModel dx="2282" dy="1336" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2050" pageHeight="1100" math="0" shadow="0">
+    <mxGraphModel dx="2416" dy="1414" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2050" pageHeight="1100" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -28,7 +28,7 @@
         <mxCell id="nand_if" parent="1" style="shape=rhombus;perimeter=rhombusPerimeter;whiteSpace=wrap;html=1;fillColor=none;strokeWidth=2;fontSize=13;fontFamily=Comic Sans MS;align=center;verticalAlign=middle;spacing=0;" value="NAND 接口&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;nand_d / 控制 / rdy&lt;/font&gt;" vertex="1">
           <mxGeometry height="72" width="205" x="1777.5" y="360" as="geometry" />
         </mxCell>
-        <mxCell id="mmio_in" parent="1" style="shape=rhombus;perimeter=rhombusPerimeter;whiteSpace=wrap;html=1;fillColor=none;strokeWidth=2;fontSize=13;fontFamily=Comic Sans MS;align=center;verticalAlign=middle;spacing=0;" value="外设输入&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;PS/2 / VGA CLK&lt;br&gt;boot_ddr_ready&lt;/font&gt;" vertex="1">
+        <mxCell id="mmio_in" parent="1" style="shape=rhombus;perimeter=rhombusPerimeter;whiteSpace=wrap;html=1;fillColor=none;strokeWidth=2;fontSize=13;fontFamily=Comic Sans MS;align=center;verticalAlign=middle;spacing=0;" value="外设输入&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;PS/2 / UART RX / VGA CLK&lt;br&gt;boot_ddr_ready&lt;/font&gt;" vertex="1">
           <mxGeometry height="78" width="220" x="1770" y="450" as="geometry" />
         </mxCell>
         <mxCell id="mmio_out" parent="1" style="shape=rhombus;perimeter=rhombusPerimeter;whiteSpace=wrap;html=1;fillColor=none;strokeWidth=2;fontSize=13;fontFamily=Comic Sans MS;align=center;verticalAlign=middle;spacing=0;" value="外设与启动输出&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;VGA / UART TX / irq&lt;br&gt;LED / SEG / boot_*&lt;/font&gt;" vertex="1">
