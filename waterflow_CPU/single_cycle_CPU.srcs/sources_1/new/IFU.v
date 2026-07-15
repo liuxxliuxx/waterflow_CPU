@@ -65,10 +65,6 @@ module IFU(
 
     wire [31:0] resp_next_pc = pred_taken ? pred_target : req_pc_hold + 32'd4;
 
-    /*
-    * slot0、slot1、req_pending 一共最多允许两个有效 token。
-    * 这样能够保证当前请求返回时一定有位置保存。
-    */
     wire [2:0] token_count ={2'b0, slot0_valid} + {2'b0, slot1_valid} + {2'b0, req_pending};
 
     wire request_slot_free = !req_pending || resp_fire;
@@ -78,11 +74,6 @@ module IFU(
         pop ||
         (resp_fire && resp_drop);
 
-    /*
-    * redirect_pending 优先；
-    * 正常响应到达时，直接用响应指令的预测结果发下一请求；
-    * 没有响应时使用 fetch_pc。
-    */
     wire [31:0] issue_pc =
         redirect_pending ? redirect_pc_hold :
         resp_good        ? resp_next_pc      :
@@ -142,18 +133,12 @@ module IFU(
                 redirect_pc_hold <= redirect_pc;
 
                 if (resp_fire) begin
-                    /*
-                    * 旧响应已经在本拍返回。
-                    * 虽然响应数据要丢弃，但 pending 必须清除。
-                    */
+                    //丢弃响应数据，清除pending
                     req_pending <= 1'b0;
                     req_kill    <= 1'b0;
                 end
                 else begin
-                    /*
-                    * 旧请求尚未返回，保留 pending，
-                    * 等响应回来后再丢弃。
-                    */
+                    //丢弃响应数据
                     req_kill <= req_pending;
                 end
             end
@@ -162,7 +147,7 @@ module IFU(
                     req_pending <= 1'b0;
                     req_kill    <= 1'b0;
 
-                    if (resp_good)
+                    if (resp_good)//如果需要保留，更新pc
                         fetch_pc <= resp_next_pc;
                 end
 
@@ -177,8 +162,9 @@ module IFU(
                 case ({resp_good, pop})
                     2'b00: begin
                     end
-                    2'b01: begin
+                    2'b01: begin//当前指令已经被IF/ID吸收，并且没有新指令返回
                         if (slot1_valid) begin
+                            //槽位1的数据送到槽位0
                             slot0_valid       <= 1'b1;
                             slot0_pc          <= slot1_pc;
                             slot0_inst        <= slot1_inst;
@@ -193,8 +179,9 @@ module IFU(
                         end
                     end
 
-                    2'b10: begin
+                    2'b10: begin//当前有新指令返回，但没有指令被吸收
                         if (!slot0_valid) begin
+                            //如果槽位0为空，送入槽位0
                             slot0_valid       <= 1'b1;
                             slot0_pc          <= req_pc_hold;
                             slot0_inst        <= inst_resp_data;
@@ -203,6 +190,7 @@ module IFU(
                             slot0_pred_target <= pred_target;
                         end
                         else begin
+                            //送入槽位1
                             slot1_valid       <= 1'b1;
                             slot1_pc          <= req_pc_hold;
                             slot1_inst        <= inst_resp_data;
@@ -212,15 +200,16 @@ module IFU(
                         end
                     end
 
-                    2'b11: begin
+                    2'b11: begin//当前既有新指令返回，又有指令被吸收
                         if (slot1_valid) begin
+                            //槽1的指令送入槽0
                             slot0_valid       <= 1'b1;
                             slot0_pc          <= slot1_pc;
                             slot0_inst        <= slot1_inst;
                             slot0_err         <= slot1_err;
                             slot0_pred_taken  <= slot1_pred_taken;
                             slot0_pred_target <= slot1_pred_target;
-
+                            //新接收的指令送入槽1
                             slot1_valid       <= 1'b1;
                             slot1_pc          <= req_pc_hold;
                             slot1_inst        <= inst_resp_data;
@@ -229,6 +218,7 @@ module IFU(
                             slot1_pred_target <= pred_target;
                         end
                         else begin
+                            //槽1没有数据，直接覆盖槽0
                             slot0_valid       <= 1'b1;
                             slot0_pc          <= req_pc_hold;
                             slot0_inst        <= inst_resp_data;

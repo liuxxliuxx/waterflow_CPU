@@ -64,7 +64,7 @@ module CSRFile(
     wire timer_periodic = csr_tcfg[1];
     wire [29:0] tcfg_init = csr_tcfg[31:2];
 
-    always @(*) begin
+    always @(*) begin//CSR读
         case (csr_raddr)
             `CSR_CRMD:   csr_rdata = csr_crmd;
             `CSR_PRMD:   csr_rdata = csr_prmd;
@@ -153,19 +153,19 @@ module CSRFile(
             // timer
             if (timer_en) begin
                 if (csr_tval == 32'b0) begin
-                    csr_estat[11] <= 1'b1;  // 定时器中断pending
+                    csr_estat[11] <= 1'b1;//产生定时器中断pending
 
-                    if (timer_periodic)
+                    if (timer_periodic)   //定时器循环 tcfg[1]
                         csr_tval <= {tcfg_init, 2'b0};
                     else
-                        csr_tcfg[0] <= 1'b0;
+                        csr_tcfg[0] <= 1'b0;//否则定时器关闭
                 end
                 else begin
-                    csr_tval <= csr_tval - 32'd1;
+                    csr_tval <= csr_tval - 32'd1;//定时器的值每周期减一
                 end
             end
 
-            // 异常进入，优先级最高
+            // 异常进入
             if (exc_valid) begin
                 // PRMD 保存旧 PLV / IE
                 csr_prmd[1:0] <= csr_crmd[1:0];
@@ -176,7 +176,7 @@ module CSRFile(
                 csr_crmd[2]   <= 1'b0;
 
                 csr_era_reg       <= exc_pc;
-                if ((exc_ecode == `ECODE_ADEF) ||
+                if ((exc_ecode == `ECODE_ADEF) ||//如果是地址类异常，就保存异常地址
                     (exc_ecode == `ECODE_ALE)  ||
                     (exc_ecode == `ECODE_ADEM)) begin
                     csr_badv <= exc_badv;
@@ -184,11 +184,11 @@ module CSRFile(
                 csr_estat[21:16]  <= exc_ecode;
                 csr_estat[30:22]  <= exc_esubcode;
             end
-            else if (ertn_valid) begin
+            else if (ertn_valid) begin//异常返回
                 csr_crmd[1:0] <= csr_prmd[1:0];
                 csr_crmd[2]   <= csr_prmd[2];
             end
-            else if (csr_we) begin
+            else if (csr_we) begin//CSR写使能
                 case (csr_waddr)
                     `CSR_CRMD:   csr_crmd       <= {22'b0,crmd[9:0]};
                     `CSR_PRMD:   csr_prmd       <= {28'b0,prmd[3:0]};

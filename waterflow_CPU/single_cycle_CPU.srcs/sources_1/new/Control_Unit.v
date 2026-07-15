@@ -50,8 +50,6 @@ module Control_Unit(
     output reg[3:0]  WB_Sel,
     output reg[1:0]  FPWB_Sel,
 
-    output           issc,
-    output           isll,
 
     output           rdtime_tid_only
     
@@ -108,8 +106,6 @@ module Control_Unit(
     wire idle   = (inst[31:15] == 17'h00c91);
     wire cacop  = (inst[31:22] == 10'h018);
     
-    wire ll_w   = (inst[31:24] == 8'h20);//读内�??+记录地址+设置llbit
-    wire sc_w   = (inst[31:24] == 8'h21);//判断llbit，如果是1就写内存并且rd�??1，否则rd�??0不写内存
 
     wire csrrd  = (inst[31:24] == 8'h04) && (inst[9:5] == 5'h0);//从CSR寄存器中读数据到通用寄存�??
     wire csrwr  = (inst[31:24] == 8'h04) && (inst[9:5] == 5'h1);//将rd数据写入CSR寄存�??
@@ -175,8 +171,8 @@ module Control_Unit(
 
     wire r_type = add_w | sub_w | mul_w | and_ | nor_ | xor_ | or_ | slt | sltu | sll_w | srl_w | sra_w | andn | orn | mulh_w | mulh_wu | div_w | mod_w | div_wu | mod_wu | alsl_w | maskeqz | masknez ;
     
-    wire load_gpr  = ld_b | ld_h | ld_w | ld_bu | ld_hu | ll_w;
-    wire store_gpr = st_b | st_h | st_w | sc_w;
+    wire load_gpr  = ld_b | ld_h | ld_w | ld_bu | ld_hu ;
+    wire store_gpr = st_b | st_h | st_w ;
 
     wire load_fp   = fld_s;
     wire store_fp  = fst_s;
@@ -211,7 +207,6 @@ module Control_Unit(
 
     wire valid_mem_inst = ld_b | ld_h | ld_w | ld_bu | ld_hu
                         | st_b | st_h | st_w
-                        | ll_w | sc_w
                         | fld_s | fst_s;
 
     wire valid_branch_inst = beq | bne | blt | bge | bltu | bgeu
@@ -239,10 +234,8 @@ module Control_Unit(
                         | rdtimel_w | rdtimeh_w
 
                         // load 类写 GPR
-                        | ld_b | ld_h | ld_w | ld_bu | ld_hu | ll_w
+                        | ld_b | ld_h | ld_w | ld_bu | ld_hu 
 
-                        // sc.w 要写 rd = 成功/失败标志
-                        | sc_w
 
                         // 跳转链接�?? GPR
                         | bl | jirl
@@ -256,8 +249,8 @@ module Control_Unit(
     assign RegDst   = store_gpr | beq | bne | blt | bge | bltu | bgeu | csrwr | csrxchg;
     assign RegDst1  = bl;
     assign ALUSrc1  = bl | jirl | pcaddi | pcaddu12i | pcalau12i;
-    assign MemWr    = st_b|st_h|st_w|fst_s|sc_w;
-    assign MemRd    = ld_b|ld_h|ld_w|ld_bu|ld_hu|ll_w|fld_s;
+    assign MemWr    = st_b|st_h|st_w|fst_s;
+    assign MemRd    = ld_b|ld_h|ld_w|ld_bu|ld_hu|fld_s;
     assign MemEn    = MemWr | MemRd ;
     assign MemZeroExt=ld_bu|ld_hu;
     assign trap_sys  = syscall;
@@ -286,8 +279,6 @@ module Control_Unit(
 
     assign alsl_shift = {1'b0,inst[16:15]}+3'd1;
     
-    assign isll = ll_w;
-    assign issc = sc_w;
     
     assign FpRegWr    = fadd_s | fsub_s | fmul_s | fmov_s | movgr2fr_w | fld_s ;
     assign FptoGpr    = movfr2gr_s ;
@@ -320,7 +311,6 @@ module Control_Unit(
             ld_b, ld_h, ld_w, ld_bu, ld_hu,
             st_b, st_h, st_w,
             fld_s, fst_s,
-            ll_w, sc_w,
             pcaddi, pcaddu12i, pcalau12i,
             cacop:
                 ALUSrc2 = 2'b01;
@@ -350,7 +340,7 @@ module Control_Unit(
         case(1'b1)
             ld_b | ld_bu | st_b: MemSz = 2'b00;
             ld_h | ld_hu | st_h: MemSz = 2'b01;
-            ld_w | st_w  | fst_s | fld_s | ll_w | sc_w :MemSz = 2'b10;
+            ld_w | st_w  | fst_s | fld_s :MemSz = 2'b10;
             default:             MemSz = 2'b10;
         endcase
     end
@@ -364,7 +354,6 @@ module Control_Unit(
             ld_b, ld_h, ld_w, ld_bu, ld_hu,
             st_b, st_h, st_w,
             fld_s, fst_s,
-            ll_w, sc_w,
             bl, jirl,
             pcaddi,
             pcaddu12i,
@@ -439,8 +428,7 @@ module Control_Unit(
 
     always @(*) begin
         case(1'b1)
-            ld_b, ld_h, ld_w, ld_bu, ld_hu, ll_w: WB_Sel = `WB_MEM;
-            sc_w: WB_Sel = `WB_SC;
+            ld_b, ld_h, ld_w, ld_bu, ld_hu: WB_Sel = `WB_MEM;
             bl,jirl: WB_Sel = `WB_PC4;
             csrrd, csrwr, csrxchg: WB_Sel = `WB_CSR;
             cpucfg: WB_Sel = `WB_CPUCFG;
@@ -503,9 +491,6 @@ module Control_Unit(
 
             pcaddi:
                 ImmType = `IMM_SI20_LSL2;
-
-            ll_w, sc_w:
-                ImmType = `IMM_SI14_LSL2;
 
             jirl,beq,bne,blt,bge,bltu,bgeu:
                 ImmType = `IMM_SI16_LSL2;
