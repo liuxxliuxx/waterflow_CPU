@@ -9,28 +9,28 @@ module CPU(
     output [31:0] test_pc_cur,
     output [31:0] test_inst,
 
-    output        inst_req_valid,
-    input         inst_req_ready,
-    output [31:0] inst_req_vaddr,
+    output        inst_req_valid,//指令请求
+    input         inst_req_ready,//外部可接收请求
+    output [31:0] inst_req_vaddr,//指令请求地址
 
-    input         inst_resp_valid,
-    input  [31:0] inst_resp_data,
-    input         inst_resp_err,
+    input         inst_resp_valid,//指令响应
+    input  [31:0] inst_resp_data,//请求的指令数据
+    input         inst_resp_err,//请求错误
 
 
-    output        data_req_valid,
-    input         data_req_ready,
-    output        data_req_we,
-    output [31:0] data_req_vaddr,
-    output [31:0] data_req_wdata,
-    output [3:0]  data_req_wstrb,
-    output [1:0]  data_req_size,
+    output        data_req_valid,//数据请求
+    input         data_req_ready,//外部可接收请求
+    output        data_req_we,//数据写使能
+    output [31:0] data_req_vaddr,//数据请求地址
+    output [31:0] data_req_wdata,//写入数据
+    output [3:0]  data_req_wstrb,//数据写掩码
+    output [1:0]  data_req_size,//数据位宽
 
-    input         data_resp_valid,
-    input  [31:0] data_resp_rdata,
-    input         data_resp_err,
+    input         data_resp_valid,//数据响应
+    input  [31:0] data_resp_rdata,//请求的数据
+    input         data_resp_err,//请求错误
 
-    input  [7:0]  hw_int
+    input  [7:0]  hw_int//外部中断输入
 );
     
     wire mem_stall;
@@ -611,7 +611,10 @@ module CPU(
 
     wire [31:0] id_fp_rdata2 = (ifid_valid && id_FpSrc2Used && memwb_valid && memwb_FpRegWr && (memwb_fp_waddr == id_fp_rs2)) ? memwb_fp_wdata : id_fp_rdata2_raw;
 
-    assign fp_load_use_stall = ifid_valid && idex_valid && idex_MemRd && idex_FpRegWr && ((id_FpSrc1Used && (id_fp_rs1 == idex_fp_waddr)) ||(id_FpSrc2Used && (id_fp_rs2 == idex_fp_waddr)));
+    assign fp_load_use_stall = ifid_valid && idex_valid 
+                            && idex_MemRd && idex_FpRegWr 
+                            && ((id_FpSrc1Used && (id_fp_rs1 == idex_fp_waddr)) 
+                            ||(id_FpSrc2Used && (id_fp_rs2 == idex_fp_waddr)));
 
     wire [31:0] id_rdata1 =
         (ifid_valid && id_Src1Used &&
@@ -1018,7 +1021,6 @@ module CPU(
                 exmem_forward_data = exmem_fp_to_gp_data;
             end
 
-            // load / ll.w 不能从 EX/MEM 转发，必须等 MEM/WB
             `WB_MEM: begin
                 exmem_forward_data = 32'b0;
             end
